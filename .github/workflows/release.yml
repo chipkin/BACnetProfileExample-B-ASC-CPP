@@ -1,0 +1,97 @@
+# Build the B-ASC example and publish a GitHub Release when a vX.Y.Z tag is pushed.
+#
+# The CAS BACnet Stack is a PRIVATE git submodule. GitHub Actions' default token
+# cannot read another private repo, so set a repository secret named
+# CAS_STACK_PAT to a Personal Access Token that has read access to
+# chipkin/cas-bacnet-stack. Without it the submodule checkout will fail.
+name: build-and-release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"        # e.g. v1.0.0
+  workflow_dispatch:     # also allow manual runs
+
+permissions:
+  contents: write        # needed to create the Release
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: BACnetExampleBASC-windows-x64
+            exe: build/Release/BACnetExampleBASC.exe
+          - os: ubuntu-latest
+            artifact: BACnetExampleBASC-linux-x64
+            exe: build/BACnetExampleBASC
+    steps:
+      # The CAS BACnet Stack submodule has deeply-nested paths (googletest
+      # packages) that exceed Windows' 260-char MAX_PATH; enable long paths so
+      # the submodule checkout succeeds.
+      - name: Enable git long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
+      - name: Checkout (with the CAS BACnet Stack submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # PAT with read access to the private stack repo; falls back to the
+          # default token (which only works if the stack is made accessible).
+          token: ${{ secrets.CAS_STACK_PAT || github.token }}
+
+      - name: Configure
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Smoke test (starts, binds, and stays up)
+        shell: bash
+        run: |
+          "${{ matrix.exe }}" --port 47808 > smoke.log 2>&1 &
+          PID=$!
+          sleep 3
+          if kill -0 "$PID" 2>/dev/null; then
+            kill "$PID" 2>/dev/null || true
+          else
+            echo "FAIL: device exited early"; cat smoke.log; exit 1
+          fi
+          grep -q "ready" smoke.log || { echo "FAIL: no 'ready' line"; cat smoke.log; exit 1; }
+          echo "OK:"; cat smoke.log
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "${{ matrix.exe }}" dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+
+  release:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/**/*
