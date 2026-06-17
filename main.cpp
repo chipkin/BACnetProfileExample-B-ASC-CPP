@@ -148,6 +148,9 @@ struct Commandable {
     double relinquishDefault; // used when every slot is null
 };
 
+// The { { false }, { 0 }, default } initializer zero-fills all 16 slots of isSet
+// and value (C++ aggregate rules: the remaining elements are value-initialized),
+// so every priority slot starts null and Present_Value reports relinquishDefault.
 static Commandable g_analogOutput = { { false }, { 0 }, 20.0 }; // setpoint, default 20.0 C
 static Commandable g_binaryOutput = { { false }, { 0 }, 0.0 };  // default inactive (0)
 static Commandable g_multiStateOutput = { { false }, { 0 }, 1.0 }; // default state 1
@@ -703,18 +706,34 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
 
     // Check the password if this device requires one. A device with no configured
     // password (DCC_PASSWORD == "") accepts any request.
+    //
+    // The compare is length-checked first (so memcmp never reads past the wire
+    // buffer, which is NOT null-terminated) and folds the byte comparison into a
+    // single accumulator so it does not short-circuit on the first wrong byte -
+    // a constant-time-style compare that avoids leaking how much of the password
+    // matched via timing. On a mismatch we set *errorCode = password-failure; the
+    // stack pairs that with Error Class = SECURITY (see clause 16.1.1.3.1).
     const size_t requiredLength = strlen(DCC_PASSWORD);
     if (requiredLength > 0) {
-        if (password == NULL || passwordLength != requiredLength ||
-            memcmp(password, DCC_PASSWORD, requiredLength) != 0) {
+        unsigned diff = (password == NULL) ? 1u : (unsigned)(passwordLength ^ requiredLength);
+        if (password != NULL && passwordLength == requiredLength) {
+            for (size_t i = 0; i < requiredLength; ++i) {
+                diff |= (unsigned)((unsigned char)password[i] ^ (unsigned char)DCC_PASSWORD[i]);
+            }
+        }
+        if (diff != 0) {
             printf("DeviceCommunicationControl: REJECTED (password failure)\n");
             *errorCode = ERROR_CODE_PASSWORD_FAILURE;
             return false;
         }
     }
 
+    // NOTE: the stack applies the deprecation rule AFTER this callback. For the
+    // deprecated plain "disable" (1) at Protocol_Revision >= 20 it overrides our
+    // acceptance and answers service-request-denied - so the line we print for
+    // that case reflects the request received, not a state the device entered.
     const char* action = (enableDisable == DCC_ENABLE) ? "enable (resume communication)" :
-                         (enableDisable == DCC_DISABLE) ? "disable (stop initiating + responding)" :
+                         (enableDisable == DCC_DISABLE) ? "disable (1) - DEPRECATED, the stack will reject this" :
                          (enableDisable == DCC_DISABLE_INITIATION) ? "disable-initiation (keep responding)" :
                          "unknown";
     if (useTimeDuration) {
@@ -722,7 +741,12 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
     } else {
         printf("DeviceCommunicationControl: %s (indefinitely)\n", action);
     }
-    return true; // the stack now applies the new communication state
+    // Return true to accept. We do NOT set *errorCode here: when a callback
+    // returns false without setting it, the stack supplies a sensible default
+    // error; we only write *errorCode to override that with a specific one (as the
+    // password path above does, and as the SetProperty* callbacks do for
+    // value-out-of-range).
+    return true;
 }
 
 // -----------------------------------------------------------------------------
