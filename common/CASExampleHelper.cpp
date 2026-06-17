@@ -144,11 +144,19 @@ bool GetPrimaryIPv4(uint8_t ip[4], uint8_t mask[4]) {
         return false;
     }
     for (const IP_ADAPTER_INFO* a = adapters; a != NULL; a = a->Next) {
-        struct in_addr ipAddr, maskAddr;
+        struct in_addr ipAddr;
+        struct in_addr maskAddr;
+        maskAddr.s_addr = 0; // default if the mask string fails to parse (below)
         if (inet_pton(AF_INET, a->IpAddressList.IpAddress.String, &ipAddr) != 1) {
             continue;            // not a valid IPv4 address
         }
-        inet_pton(AF_INET, a->IpAddressList.IpMask.String, &maskAddr);
+        // The subnet mask is best-effort: if it does not parse, leave it 0.0.0.0,
+        // which makes the local broadcast fall back to 255.255.255.255 (the limited
+        // broadcast) - the same behaviour as the POSIX path with no netmask. Always
+        // check the return; never read an uninitialised in_addr.
+        if (inet_pton(AF_INET, a->IpAddressList.IpMask.String, &maskAddr) != 1) {
+            maskAddr.s_addr = 0;
+        }
         const uint32_t ipN = ipAddr.s_addr;   // network byte order
         const uint32_t maskN = maskAddr.s_addr;
         if (ipN == 0) {
