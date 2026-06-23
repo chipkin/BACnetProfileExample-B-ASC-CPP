@@ -47,15 +47,17 @@
 // Protocol_*). The handful that the application must supply are served by the
 // Get*Property callbacks below, and a few are turned on with SetPropertyEnabled.
 //
-// Interactive keys (handled by the shared helper): h = help, q = quit,
-// up/down = nudge Analog Input 1 by +/-1.1. Command line: --port <n>,
-// --deviceID <n>.
+// Interactive keys (handled by the shared helper): h = help, q = quit, e = edit
+// mode (pick one of the three read-only inputs and change its Present_Value with
+// up/down/space). The commandable outputs are driven by WriteProperty, not the
+// keyboard. Command line: --port <n>, --deviceID <n>.
 //
 // All the UDP/stack plumbing lives in common/CASExampleHelper so this file can
 // stay focused on the BACnet logic.
 // =============================================================================
 
 #include "CASExampleHelper.h"
+#include "CASExampleEditor.h"
 #include "CASBACnetStackExampleConstants.h"
 #include "CASBACnetStackDLL.h" // the CAS BACnet Stack C API (BACnetStack_*)
 
@@ -125,9 +127,17 @@ static uint8_t g_ipDefaultGateway[4] = { 0, 0, 0, 0 };
 static uint16_t g_bacnetIpUdpPort = 47808;
 
 // Analog Input 1's live present value (degrees Celsius). Starts at 21.5 and is
-// nudged by the up/down arrow keys. A real sensor would update this from
-// hardware instead.
+// changed from the keyboard in "edit mode" (handled by common/CASExampleHelper).
+// A real sensor would update this from hardware instead.
 static float g_analogInput1Value = 21.5f;
+
+// Binary Input 1's live present value (0 = inactive, 1 = active). Also editable
+// from the keyboard. A real device would set this from a contact / relay input.
+static uint32_t g_binaryInput1Value = 1;       // active
+
+// Multi-State Input 1's live present value (a state, 1..3). Also editable from
+// the keyboard. A real device would map this to a discrete sensor state.
+static uint32_t g_multiStateInput1Value = 1;   // state 1
 
 // The commandable OUTPUT objects (all instance 1) and their colour names. These
 // are what make this a B-SA actuator: clients drive them with WriteProperty.
@@ -214,7 +224,10 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
 // answers with the proper BACnet error.
 // -----------------------------------------------------------------------------
 
-// REAL (floating point) - the Analog Input's Present_Value.
+// REAL (floating point) callback.
+//   PROPERTY_IDENTIFIER_PRESENT_VALUE (85): an object's current value. For an
+//   Analog Input it is the live sensor reading (here, degrees Celsius); for the
+//   commandable Analog Output it is resolved from the Priority_Array below.
 bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      float* value, const bool useArrayIndex,
@@ -259,8 +272,10 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
     return false;
 }
 
-// ENUMERATED - the Binary Input's Present_Value (0 = inactive, 1 = active) and
-// the Analog Input's Units (degrees Celsius).
+// ENUMERATED callback - serves properties whose value is one of a fixed set of
+// named codes: the Binary Input's state, the Analog Input's Units, the Network
+// Port's BACnet/IP mode, plus the commandable Binary Output. Each property
+// identifier is described at its case.
 bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectType,
                            const uint32_t objectInstance, const uint32_t propertyIdentifier,
                            uint32_t* value, const bool useArrayIndex,
@@ -270,12 +285,16 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
     }
     if (objectType == OBJECT_TYPE_BINARY_INPUT &&
         objectInstance == BINARY_INPUT_INSTANCE) {
+        // PROPERTY_IDENTIFIER_PRESENT_VALUE (85): a Binary Input's state,
+        // 0 = inactive, 1 = active.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-            *value = 1; // active
+            *value = g_binaryInput1Value; // live value (edit mode toggles it)
             return true;
         }
+        // PROPERTY_IDENTIFIER_POLARITY (84): whether the physical signal is read
+        // as-is (NORMAL) or inverted (REVERSE). A required Binary Input property.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_POLARITY) {
-            *value = POLARITY_NORMAL; // required property of a Binary Input
+            *value = POLARITY_NORMAL;
             return true;
         }
     }
@@ -303,23 +322,30 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
             return true;
         }
     }
+    // PROPERTY_IDENTIFIER_UNITS (117): the engineering units of an Analog object's
+    // Present_Value (here, degrees Celsius).
     if (objectType == OBJECT_TYPE_ANALOG_INPUT &&
         objectInstance == ANALOG_INPUT_INSTANCE &&
         propertyIdentifier == PROPERTY_IDENTIFIER_UNITS) {
         *value = ENGINEERING_UNITS_DEGREES_CELSIUS;
         return true;
     }
+    // PROPERTY_IDENTIFIER_BACNET_IP_MODE (408): a BACnet/IP Network Port's role -
+    // NORMAL (an ordinary BACnet/IP node), FOREIGN (a Foreign Device that
+    // registers with a BBMD), or BBMD. This device is an ordinary node.
     if (objectType == OBJECT_TYPE_NETWORK_PORT &&
         objectInstance == NETWORK_PORT_INSTANCE &&
         propertyIdentifier == PROPERTY_IDENTIFIER_BACNET_IP_MODE) {
-        *value = BACNET_IP_MODE_NORMAL; // not foreign-device, not BBMD
+        *value = BACNET_IP_MODE_NORMAL;
         return true;
     }
     return false;
 }
 
-// UNSIGNED INTEGER - the Multi-State Input's Present_Value, and the Device's
-// Vendor_Identifier (the stack also uses Vendor_Identifier to build I-Am).
+// UNSIGNED INTEGER callback - serves unsigned-integer properties: the Multi-State
+// Input's state, the Device's Vendor_Identifier, several Network Port numbers, and
+// the commandable Multi-State Output. Each property identifier is described at its
+// case below.
 bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t objectType,
                                 const uint32_t objectInstance, const uint32_t propertyIdentifier,
                                 uint32_t* value, const bool useArrayIndex,
@@ -329,36 +355,49 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
     }
     if (objectType == OBJECT_TYPE_MULTI_STATE_INPUT &&
         objectInstance == MULTI_STATE_INPUT_INSTANCE) {
+        // PROPERTY_IDENTIFIER_PRESENT_VALUE (85): a Multi-State object's current
+        // state, an integer in 1..Number_Of_States.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-            *value = 1; // state 1 (valid range is 1..Number_Of_States)
+            *value = g_multiStateInput1Value; // live value (edit mode steps it)
             return true;
         }
+        // PROPERTY_IDENTIFIER_NUMBER_OF_STATES (74): how many states the object
+        // has; Present_Value is valid as 1..this. A required property.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_NUMBER_OF_STATES) {
-            *value = MULTI_STATE_INPUT_NUMBER_OF_STATES; // required property
+            *value = MULTI_STATE_INPUT_NUMBER_OF_STATES;
             return true;
         }
-        // State_Text is an array. The stack asks for its LENGTH here (array
-        // index 0) before reading each element via GetPropertyCharString.
+        // PROPERTY_IDENTIFIER_STATE_TEXT (110): an array of human-readable labels,
+        // one per state. The stack asks for the array LENGTH here (array index 0)
+        // before reading each element via GetPropertyCharString.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_STATE_TEXT &&
             useArrayIndex && propertyArrayIndex == 0) {
             *value = MULTI_STATE_INPUT_NUMBER_OF_STATES;
             return true;
         }
     }
+    // PROPERTY_IDENTIFIER_VENDOR_IDENTIFIER (120): the manufacturer's
+    // ASHRAE-assigned vendor ID (389 = Chipkin). The stack also uses it in I-Am.
     if (objectType == OBJECT_TYPE_DEVICE && objectInstance == g_deviceInstance &&
         propertyIdentifier == PROPERTY_IDENTIFIER_VENDOR_IDENTIFIER) {
         *value = VENDOR_IDENTIFIER;
         return true;
     }
     if (objectType == OBJECT_TYPE_NETWORK_PORT && objectInstance == NETWORK_PORT_INSTANCE) {
+        // PROPERTY_IDENTIFIER_APDU_LENGTH (399): the largest APDU (bytes) the port
+        // accepts - 1476 for BACnet/IP.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_APDU_LENGTH) {
             *value = MAX_APDU_LENGTH;
             return true;
         }
+        // PROPERTY_IDENTIFIER_REFERENCE_PORT (483): the port this one layers on;
+        // "none" for the lowest (physical) layer, as here.
         if (propertyIdentifier == PROPERTY_IDENTIFIER_REFERENCE_PORT) {
             *value = NETWORK_PORT_REFERENCE_PORT_NONE;
             return true;
         }
+        // PROPERTY_IDENTIFIER_BACNET_IP_UDP_PORT (412): the UDP port the device
+        // listens on for BACnet/IP (default 47808 / 0xBAC0).
         if (propertyIdentifier == PROPERTY_IDENTIFIER_BACNET_IP_UDP_PORT) {
             *value = g_bacnetIpUdpPort;
             return true;
@@ -391,9 +430,13 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
     return false;
 }
 
-// BOOLEAN - Out_Of_Service is a required property of every input object and of
-// the Network Port. This is a read-only sensor, so nothing is ever out of
-// service: always false.
+// BOOLEAN callback.
+//   PROPERTY_IDENTIFIER_OUT_OF_SERVICE (81): when true, the object is decoupled
+//   from the physical world (its Present_Value can be written for testing). This
+//   example never takes anything out of service, so it always returns false. It is
+//   a required property of every input/output object and of the Network Port.
+//   PROPERTY_IDENTIFIER_PRIORITY_ARRAY (87): the stack also uses this callback to
+//   ask whether a commandable output's Priority_Array slot is null (relinquished).
 bool GetPropertyBool(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      bool* value, const bool useArrayIndex,
@@ -445,6 +488,10 @@ bool GetPropertyOctetString(const uint32_t deviceInstance, const uint16_t object
         maxElementCount < 4) {
         return false;
     }
+    // PROPERTY_IDENTIFIER_IP_ADDRESS (400) / IP_SUBNET_MASK (411) /
+    // IP_DEFAULT_GATEWAY (401): the Network Port's IPv4 settings, each a 4-octet
+    // string. The stack also builds the port's MAC_Address from IP_Address + the
+    // BACnet_IP_UDP_Port.
     const uint8_t* source = NULL;
     switch (propertyIdentifier) {
         case PROPERTY_IDENTIFIER_IP_ADDRESS:         source = g_ipAddress; break;
@@ -473,7 +520,13 @@ static bool ReturnCharacterString(const char* text, char* value,
     return true;
 }
 
-// CHARACTER STRING - Object_Name for each object, and the device Description.
+// CHARACTER STRING callback - serves text properties:
+//   PROPERTY_IDENTIFIER_OBJECT_NAME (77): each object's name (the colour names).
+//   PROPERTY_IDENTIFIER_STATE_TEXT (110): a Multi-State Input's per-state labels.
+//   PROPERTY_IDENTIFIER_DESCRIPTION (28): the Device's free-text description.
+//   PROPERTY_IDENTIFIER_VENDOR_NAME (121) / MODEL_NAME (70) / FIRMWARE_REVISION
+//   (44) / APPLICATION_SOFTWARE_VERSION (12): Device identity strings, also
+//   surfaced during Who-Is / I-Am discovery.
 bool GetPropertyCharString(const uint32_t deviceInstance, const uint16_t objectType,
                            const uint32_t objectInstance, const uint32_t propertyIdentifier,
                            char* value, uint32_t* valueElementCount,
@@ -696,6 +749,7 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
 // (the device keeps answering reads but stops initiating). So at rev 24 only
 // enable (0) and disable-initiation (2) actually take effect.
 // -----------------------------------------------------------------------------
+// [F-DCC] DeviceCommunicationControl - canonical source: B-ASC (this example). Copied by every profile that answers DM-DCC-B.
 bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t enableDisable,
                                 const char* password, const uint8_t passwordLength,
                                 const bool useTimeDuration, const uint16_t timeDuration,
@@ -900,34 +954,42 @@ int main(int argc, char** argv) {
     // local subnet broadcast - the Network Port's own network).
     CASExampleHelper::SendIAm(g_deviceInstance);
 
-    printf("FYI: Device %u (\"%s\") ready. Vendor ID %u. Press 'h' for help.\n",
+    printf("FYI: Device %u (\"%s\") ready. Vendor ID %u. Press 'e' to edit values, 'h' for help.\n",
            g_deviceInstance, DEVICE_NAME, VENDOR_IDENTIFIER);
+
+    // --- Register the objects the user can change from the keyboard ---------
+    // The shared helper owns the whole "edit mode" UI (press 'e', pick an object,
+    // change it with up/down). We just point it at the live value variables our
+    // Get callbacks already return; after each change the helper calls
+    // BACnetStack_UpdateValue so the stack re-evaluates COV / alarms. Keeping all
+    // of that in common/ is what lets this main.cpp stay short.
+    //
+    // Only the read-only INPUT sensors are registered here. The commandable
+    // OUTPUT objects are driven by WriteProperty (their Priority_Array), not from
+    // the keyboard, so they are deliberately left out of edit mode.
+    CASExampleEditor::SetAppInfo(APP_NAME, APP_VERSION);
+    CASExampleEditor::RegisterEditableReal(
+        g_deviceInstance, OBJECT_TYPE_ANALOG_INPUT, ANALOG_INPUT_INSTANCE,
+        "Analog Input 1 (Bronze)", &g_analogInput1Value,
+        1.1f /*step*/, -50.0f /*min C*/, 150.0f /*max C*/);
+    CASExampleEditor::RegisterEditableBinary(
+        g_deviceInstance, OBJECT_TYPE_BINARY_INPUT, BINARY_INPUT_INSTANCE,
+        "Binary Input 1 (Emerald)", &g_binaryInput1Value);
+    CASExampleEditor::RegisterEditableMultiState(
+        g_deviceInstance, OBJECT_TYPE_MULTI_STATE_INPUT, MULTI_STATE_INPUT_INSTANCE,
+        "Multi-State Input 1 (Hot Pink)", &g_multiStateInput1Value,
+        MULTI_STATE_INPUT_NUMBER_OF_STATES);
 
     // --- Run the stack ------------------------------------------------------
     // BACnetStack_Tick() processes incoming messages and timers. Call it
-    // continuously, and poll the keyboard for interactive commands.
+    // continuously; ProcessConsoleInput() handles all keyboard interaction
+    // (h help, q quit, e edit object values) and returns false on quit.
     bool running = true;
     while (running) {
         BACnetStack_Tick();
 
-        switch (CASExampleHelper::PollKey()) {
-            case CASExampleHelper::KeyCommand::Help:
-                CASExampleHelper::PrintHelp(APP_NAME, APP_VERSION);
-                break;
-            case CASExampleHelper::KeyCommand::Quit:
-                running = false;
-                break;
-            case CASExampleHelper::KeyCommand::ArrowUp:
-                g_analogInput1Value += 1.1f;
-                printf("Analog Input 1 (Bronze) = %.1f C\n", g_analogInput1Value);
-                break;
-            case CASExampleHelper::KeyCommand::ArrowDown:
-                g_analogInput1Value -= 1.1f;
-                printf("Analog Input 1 (Bronze) = %.1f C\n", g_analogInput1Value);
-                break;
-            case CASExampleHelper::KeyCommand::None:
-            default:
-                break;
+        if (!CASExampleEditor::ProcessConsoleInput()) {
+            running = false;
         }
 
 #if defined(_WIN32)
@@ -937,7 +999,7 @@ int main(int argc, char** argv) {
 #endif
     }
 
-    CASExampleHelper::RestoreInput();
+    CASExampleEditor::RestoreInput();
     CASExampleHelper::ShutdownUDP();
     return 0;
 }

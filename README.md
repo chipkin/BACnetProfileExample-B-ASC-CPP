@@ -7,8 +7,9 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 **WriteProperty** to its commandable outputs, responds to
 **DeviceCommunicationControl**, and is discoverable via **Who-Is / I-Am**.
 
-> **Versions:** this document describes **example v1.0.0**, built and verified
-> against **CAS BACnet Stack 5.4.2.0** at **Protocol_Revision 24**.
+> **Versions:** this document describes **example v1.0.0**, built against
+> **CAS BACnet Stack v6.x.x** (under active development - the exact build prints
+> at start-up) at **Protocol_Revision 24**.
 
 This is the third example in the series. It builds directly on the
 [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP)
@@ -235,7 +236,7 @@ Expected output:
 
 ```
 BACnet B-ASC (Application Specific Controller) Example - C++ v1.0.0
-CAS BACnet Stack version: 5.4.2.0
+CAS BACnet Stack version: <the linked build, printed at start-up>
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
 FYI: Device 389001 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
@@ -262,14 +263,27 @@ firewall. To use a different port, pass `--port` (see below).
 ### Interactive commands
 
 While the example runs, these keys are available (shared across all examples in
-the series):
+the series). Changing an input's `Present_Value` is done in **edit mode**:
 
 | Key | Action |
 |-----|--------|
 | `h` | Show the version information and this command list. |
 | `q` | Quit. |
-| up arrow | Increase Analog Input 1 (`Bronze`) by 1.1. |
-| down arrow | Decrease Analog Input 1 (`Bronze`) by 1.1. |
+| `e` | Enter **edit mode** to change an input's `Present_Value`. |
+
+In edit mode, pick the input to change and adjust its value:
+
+| Key | Action |
+|-----|--------|
+| number | Select the input to edit (Analog / Binary / Multi-State Input). |
+| up / down | Change the selected value (step the analog, or step the multi-state). |
+| space | Toggle the binary input, or advance the multi-state to the next state. |
+| esc | Leave edit mode. |
+
+Only the three read-only **inputs** (`Bronze`, `Emerald`, `Hot Pink`) are editable
+this way; a client re-reading one sees the new value. The commandable **outputs**
+(`Chartreuse`, `Fuchsia`, `Indigo`) are driven by **WriteProperty**, not the
+keyboard.
 
 ## Verify
 

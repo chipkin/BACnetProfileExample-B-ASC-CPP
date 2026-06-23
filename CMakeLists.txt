@@ -57,6 +57,7 @@ file(GLOB CAS_STACK_SOURCES
 # --- The shared example helper ----------------------------------------------
 set(COMMON_SOURCES
     "${EXAMPLES_COMMON_DIR}/CASExampleHelper.cpp"
+    "${EXAMPLES_COMMON_DIR}/CASExampleEditor.cpp"
     "${EXAMPLES_COMMON_DIR}/SimpleUDP.cpp")
 
 # --- The executable ---------------------------------------------------------

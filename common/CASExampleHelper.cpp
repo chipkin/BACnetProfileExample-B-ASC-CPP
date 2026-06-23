@@ -2,7 +2,9 @@
 // Public-domain example code (CC0) - see ../LICENSE.
 // CASExampleHelper.cpp
 // =============================================================================
-// Implementation of the shared example boilerplate. See CASExampleHelper.h.
+// Implementation of the shared BACnet/IP + CLI boilerplate. See
+// CASExampleHelper.h. The interactive keyboard "edit mode" lives separately in
+// CASExampleEditor.{h,cpp}.
 // =============================================================================
 
 #include "CASExampleHelper.h"
@@ -19,7 +21,6 @@
 #include <time.h>
 
 #if defined(_WIN32)
-#include <conio.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
@@ -28,9 +29,6 @@
 //   #pragma comment(lib, "ws2_32.lib")
 //   #pragma comment(lib, "iphlpapi.lib")
 #else
-#include <termios.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -196,29 +194,6 @@ bool GetPrimaryIPv4(uint8_t ip[4], uint8_t mask[4]) {
 #endif
 }
 
-#if !defined(_WIN32)
-// POSIX terminal raw-mode handling for non-blocking single-key reads.
-struct termios g_origTermios;
-bool g_rawActive = false;
-
-void EnableRawInput() {
-    if (g_rawActive) {
-        return;
-    }
-    if (tcgetattr(STDIN_FILENO, &g_origTermios) != 0) {
-        return; // not a tty (e.g. piped) - leave input alone
-    }
-    struct termios raw = g_origTermios;
-    raw.c_lflag &= ~(unsigned)(ICANON | ECHO); // no line buffering, no echo
-    raw.c_cc[VMIN] = 0;                          // non-blocking read
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-    const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    g_rawActive = true;
-}
-#endif
-
 } // namespace
 
 namespace CASExampleHelper {
@@ -228,15 +203,6 @@ void PrintVersion(const char* appName, const char* appVersion) {
     printf("CAS BACnet Stack version: %u.%u.%u.%u\n",
            BACnetStack_GetAPIMajorVersion(), BACnetStack_GetAPIMinorVersion(),
            BACnetStack_GetAPIPatchVersion(), BACnetStack_GetAPIBuildVersion());
-}
-
-void PrintHelp(const char* appName, const char* appVersion) {
-    PrintVersion(appName, appVersion);
-    printf("Commands:\n");
-    printf("  h     - show this help (version + commands)\n");
-    printf("  q     - quit\n");
-    printf("  up    - increase Analog Input 1 by 1.1\n");
-    printf("  down  - decrease Analog Input 1 by 1.1\n");
 }
 
 uint16_t ParsePortArg(const int argc, char** argv, const uint16_t defaultPort) {
@@ -311,48 +277,6 @@ void SendIAm(const uint32_t deviceInstance) {
     BACnetStack_SendIAm(deviceInstance, connectionString, 6,
                         CASBACnetStackExampleConstants::NETWORK_TYPE_IP,
                         true /*broadcast*/, 0 /*local network*/, NULL, 0);
-}
-
-KeyCommand PollKey() {
-#if defined(_WIN32)
-    if (!_kbhit()) {
-        return KeyCommand::None;
-    }
-    const int c = _getch();
-    if (c == 0 || c == 0xE0) {           // arrow / function key prefix
-        const int c2 = _getch();
-        if (c2 == 72) return KeyCommand::ArrowUp;
-        if (c2 == 80) return KeyCommand::ArrowDown;
-        return KeyCommand::None;
-    }
-    if (c == 'h' || c == 'H') return KeyCommand::Help;
-    if (c == 'q' || c == 'Q') return KeyCommand::Quit;
-    return KeyCommand::None;
-#else
-    EnableRawInput();
-    unsigned char buf[3];
-    const int n = (int)read(STDIN_FILENO, buf, sizeof(buf));
-    if (n <= 0) {
-        return KeyCommand::None;
-    }
-    if (n >= 3 && buf[0] == 27 && buf[1] == '[') { // ESC [ A/B = arrow keys
-        if (buf[2] == 'A') return KeyCommand::ArrowUp;
-        if (buf[2] == 'B') return KeyCommand::ArrowDown;
-        return KeyCommand::None;
-    }
-    if (buf[0] == 'h' || buf[0] == 'H') return KeyCommand::Help;
-    if (buf[0] == 'q' || buf[0] == 'Q') return KeyCommand::Quit;
-    return KeyCommand::None;
-#endif
-}
-
-void RestoreInput() {
-#if !defined(_WIN32)
-    if (g_rawActive) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &g_origTermios);
-        g_rawActive = false;
-    }
-#endif
 }
 
 } // namespace CASExampleHelper

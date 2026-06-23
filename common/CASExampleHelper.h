@@ -5,38 +5,33 @@
 
 // CASExampleHelper.h
 // =============================================================================
-// Shared boilerplate for every CAS BACnet Stack example project.
+// Shared BACnet/IP + CLI boilerplate for every CAS BACnet Stack example project.
 //
 // The goal of these examples is that each profile's main.cpp reads like a
-// tutorial: device setup, the objects it exposes, and the property callbacks -
-// nothing else. All the "plumbing" that is identical for every example lives
-// here:
+// tutorial: device setup, the objects it exposes, and the property callbacks.
+// All the "plumbing" that is identical for every example lives here:
 //
 //   * The UDP socket on the BACnet/IP port and the three transport/time
 //     callbacks the stack always needs (receive, send, get-system-time).
 //   * Printing version information (the example's version + the stack's).
-//   * Parsing the common command-line options (e.g. --port).
-//   * Reading the common keyboard commands (h / q / arrow up / arrow down).
+//   * Parsing the common command-line options (e.g. --port, --deviceID).
 //   * Sending an unsolicited I-Am on start-up.
 //
-// This file is generic and is copied verbatim into each example folder. Edit the
-// master copy in examples/common/ and re-copy it when releasing an example.
+// The interactive keyboard "edit mode" (changing object values while running)
+// lives in its own file, common/CASExampleEditor - see CASExampleEditor.h.
 //
-// The CAS BACnet Stack itself is compiled into the program from source, so its
-// C API (CASBACnetStackDLL.h) is linked directly - there is no "load" step.
+// This file is generic and is copied verbatim into each example folder. The CAS
+// BACnet Stack itself is compiled into the program from source, so its C API
+// (CASBACnetStackDLL.h) is linked directly - there is no "load" step.
 // =============================================================================
 
 #include <stdint.h>
 
 namespace CASExampleHelper {
 
-// --- Version / help --------------------------------------------------------
+// --- Version ---------------------------------------------------------------
 // Print the example's name + version and the linked CAS BACnet Stack version.
 void PrintVersion(const char* appName, const char* appVersion);
-
-// Print the version information plus the list of interactive key commands.
-// (This is what the 'h' key shows.)
-void PrintHelp(const char* appName, const char* appVersion);
 
 // --- Command line ----------------------------------------------------------
 // Return the UDP port to use: the value after "--port" if present, else
@@ -68,23 +63,6 @@ void SendIAm(uint32_t deviceInstance);
 // IP_Subnet_Mask), and the broadcast (ip | ~mask) is the I-Am target. Returns
 // true on success; on failure the buffers are left untouched.
 bool GetLocalIPv4(uint8_t ipAddress[4], uint8_t subnetMask[4]);
-
-// --- Keyboard input (common to every example) ------------------------------
-enum class KeyCommand {
-    None,       // nothing pressed
-    Help,       // 'h' - show version + commands
-    Quit,       // 'q' - exit
-    ArrowUp,    // up arrow
-    ArrowDown   // down arrow
-};
-
-// Non-blocking: returns a pending key command, or None if nothing was pressed.
-// Call once per tick of the main loop.
-KeyCommand PollKey();
-
-// Restore the terminal to its normal mode (POSIX); no-op on Windows. Call once
-// before the program exits.
-void RestoreInput();
 
 } // namespace CASExampleHelper
 
