@@ -1,4 +1,4 @@
-# BACnet B-ASC (Application Specific Controller) - C++ example
+﻿# BACnet B-ASC (Application Specific Controller) - C++ example
 
 A minimal, copy-paste-friendly example showing how to implement the BACnet
 **B-ASC (BACnet Application Specific Controller)** device profile in C++ using the
@@ -80,15 +80,15 @@ Set it to your device's secret to require one; a mismatch is rejected with
 ## The device this example creates
 
 ```
-Device 389001  "Rainbow"   (Vendor 389 - Chipkin Automation Systems)
-    │
-    ├── Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
-    ├── Binary Input  1       "Emerald"     Present_Value  active  (0 = inactive / 1 = active; read-only)
-    ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
-    ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
-    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
-    ├── Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
-    └── Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
+Device 389003  "Rainbow"   (Vendor 389 - Chipkin Automation Systems)
+    â”‚
+    â”œâ”€â”€ Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
+    â”œâ”€â”€ Binary Input  1       "Emerald"     Present_Value  active  (0 = inactive / 1 = active; read-only)
+    â”œâ”€â”€ Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
+    â”œâ”€â”€ Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
+    â”œâ”€â”€ Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
+    â”œâ”€â”€ Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
+    â””â”€â”€ Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
 ```
 
 The three **input** objects (Bronze, Emerald, Hot Pink) are the shared minimum
@@ -107,11 +107,11 @@ required by **B-GENERAL**, this example satisfies the **B-GENERAL** profile as w
 
 | BIBB | Description | Supported |
 |------|-------------|:---------:|
-| DS-RP-B | Data Sharing - ReadProperty - B | ✅ |
-| DS-WP-B | Data Sharing - WriteProperty - B | ✅ |
-| DM-DCC-B | Device Management - DeviceCommunicationControl - B | ✅ |
-| DM-DDB-B | Device Management - Dynamic Device Binding - B | ✅ |
-| DM-DOB-B | Device Management - Dynamic Object Binding - B | ✅ |
+| DS-RP-B | Data Sharing - ReadProperty - B | âœ… |
+| DS-WP-B | Data Sharing - WriteProperty - B | âœ… |
+| DM-DCC-B | Device Management - DeviceCommunicationControl - B | âœ… |
+| DM-DDB-B | Device Management - Dynamic Device Binding - B | âœ… |
+| DM-DOB-B | Device Management - Dynamic Object Binding - B | âœ… |
 
 ### Services (executed / B-side)
 
@@ -127,7 +127,7 @@ required by **B-GENERAL**, this example satisfies the **B-GENERAL** profile as w
 
 | Object type | Instance | Name | Access |
 |-------------|:--------:|------|--------|
-| Device | 389001 | Rainbow | - |
+| Device | 389003 | Rainbow | - |
 | Analog Input | 1 | Bronze | read-only |
 | Binary Input | 1 | Emerald | read-only |
 | Multi-State Input | 1 | Hot Pink | read-only |
@@ -238,7 +238,7 @@ BACnet B-ASC (Application Specific Controller) Example - C++ v1.0.0
 CAS BACnet Stack version: 5.4.2.0
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
-FYI: Device 389001 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
+FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
 ```
 
 The `TX` line is the start-up I-Am the device broadcasts to announce itself. It
@@ -257,7 +257,7 @@ firewall. To use a different port, pass `--port` (see below).
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `--port <n>` | `47808` | UDP port to listen on (BACnet/IP). |
-| `--deviceID <n>` | `389001` | The device's BACnet instance number (BACnet requires this to be configurable). |
+| `--deviceID <n>` | `389003` | The device's BACnet instance number (BACnet requires this to be configurable). |
 
 ### Interactive commands
 
@@ -277,10 +277,10 @@ Use a BACnet client such as the
 [**CAS BACnet Explorer**](https://store.chipkin.com/products/tools/cas-bacnet-explorer):
 
 1. **Discover** - send a **Who-Is**. The device replies with **I-Am** from
-   instance **389001** (vendor **389**). It also broadcasts an I-Am at start-up.
+   instance **389003** (vendor **389**). It also broadcasts an I-Am at start-up.
 2. **Browse the object model** - the device shows seven objects: the Device
    (`Rainbow`), three inputs, three outputs, and the Network Port (`Vermilion`).
-3. **Read the Device** - ReadProperty `389001` -> `Object_Name` = `"Rainbow"`;
+3. **Read the Device** - ReadProperty `389003` -> `Object_Name` = `"Rainbow"`;
    `Protocol_Revision` = `24`; `Description` = the profile description string.
 4. **Command an output** - WriteProperty Analog Output `1` `Present_Value` = `42.5`
    at priority `8`; re-read `Present_Value` (`42.5`) and `Priority_Array[8]`

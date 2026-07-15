@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-15
+
+### Fixed
+
+- **Default device instance is now `389003`, not `389001`.** The series
+  [device-instance table](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP)
+  assigns each profile its own default so that several examples can run on one
+  subnet; this example shipped using `389001`, which is **B-SS's** instance. Any
+  two of B-SS / B-ASC running together therefore both claimed device `389001` —
+  duplicate device instances on a subnet are a BACnet conformance problem, and
+  they make discovery ambiguous in exactly the way that is hardest to debug (see
+  the SO_REUSEADDR note in the series runbook). `--deviceID` still overrides, as
+  BACnet requires.
+
 ## [1.0.0] - 2026-06-16
 
 ### Added

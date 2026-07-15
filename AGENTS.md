@@ -1,4 +1,4 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 Guidance for AI coding agents working in this repository. See
 <https://agents.md/> for the format. Human contributors should read
@@ -38,8 +38,8 @@ lives outside the bundled submodule.
 ## Run
 
 ```bash
-./build/BACnetExampleBASC [--port 47808] [--deviceID 389001]   # Linux/macOS
-.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389001]   # Windows
+./build/BACnetExampleBASC [--port 47808] [--deviceID 389003]   # Linux/macOS
+.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389003]   # Windows
 ```
 
 Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: CC0-1.0
+﻿// SPDX-License-Identifier: CC0-1.0
 // Public-domain example code (CC0) - see LICENSE. The CAS BACnet Stack itself is
 // a separate, commercially licensed product and is not covered by CC0.
 // =============================================================================
@@ -25,7 +25,7 @@
 // three commandable outputs a client drives with WriteProperty. Each object has a
 // colour name (the convention shared across this example series):
 //
-//     Device 389001            "Rainbow"     (instance configurable with --deviceID)
+//     Device 389003            "Rainbow"     (instance configurable with --deviceID)
 //     Analog Input  1          "Bronze"      (REAL, degrees Celsius; read-only)
 //     Binary Input  1          "Emerald"     (active / inactive; read-only)
 //     Multi-State Input 1      "Hot Pink"    (state 1..3; read-only)
@@ -74,11 +74,11 @@ using namespace CASBACnetStackExampleConstants;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-ASC (Application Specific Controller) Example - C++";
-static const char* APP_VERSION = "1.0.0";
+static const char* APP_VERSION = "1.1.0";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
-// to 389001 and can be overridden on the command line with --deviceID.
-static uint32_t g_deviceInstance = 389001;
+// to 389003 and can be overridden on the command line with --deviceID.
+static uint32_t g_deviceInstance = 389003;
 
 // Your BACnet Vendor Identifier. 389 = Chipkin Automation Systems; change this
 // to YOUR company's vendor ID before shipping a product. Vendor IDs are assigned
