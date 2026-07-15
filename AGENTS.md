@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 Guidance for AI coding agents working in this repository. See
 <https://agents.md/> for the format. Human contributors should read

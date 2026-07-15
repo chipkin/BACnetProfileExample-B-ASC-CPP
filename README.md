@@ -1,4 +1,4 @@
-﻿# BACnet B-ASC (Application Specific Controller) - C++ example
+# BACnet B-ASC (Application Specific Controller) - C++ example
 
 A minimal, copy-paste-friendly example showing how to implement the BACnet
 **B-ASC (BACnet Application Specific Controller)** device profile in C++ using the
@@ -81,14 +81,14 @@ Set it to your device's secret to require one; a mismatch is rejected with
 
 ```
 Device 389003  "Rainbow"   (Vendor 389 - Chipkin Automation Systems)
-    â”‚
-    â”œâ”€â”€ Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
-    â”œâ”€â”€ Binary Input  1       "Emerald"     Present_Value  active  (0 = inactive / 1 = active; read-only)
-    â”œâ”€â”€ Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
-    â”œâ”€â”€ Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
-    â”œâ”€â”€ Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
-    â”œâ”€â”€ Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
-    â””â”€â”€ Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
+    │
+    ├── Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
+    ├── Binary Input  1       "Emerald"     Present_Value  active  (0 = inactive / 1 = active; read-only)
+    ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
+    ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
+    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
+    ├── Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
+    └── Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
 ```
 
 The three **input** objects (Bronze, Emerald, Hot Pink) are the shared minimum
@@ -107,11 +107,11 @@ required by **B-GENERAL**, this example satisfies the **B-GENERAL** profile as w
 
 | BIBB | Description | Supported |
 |------|-------------|:---------:|
-| DS-RP-B | Data Sharing - ReadProperty - B | âœ… |
-| DS-WP-B | Data Sharing - WriteProperty - B | âœ… |
-| DM-DCC-B | Device Management - DeviceCommunicationControl - B | âœ… |
-| DM-DDB-B | Device Management - Dynamic Device Binding - B | âœ… |
-| DM-DOB-B | Device Management - Dynamic Object Binding - B | âœ… |
+| DS-RP-B | Data Sharing - ReadProperty - B | ✅ |
+| DS-WP-B | Data Sharing - WriteProperty - B | ✅ |
+| DM-DCC-B | Device Management - DeviceCommunicationControl - B | ✅ |
+| DM-DDB-B | Device Management - Dynamic Device Binding - B | ✅ |
+| DM-DOB-B | Device Management - Dynamic Object Binding - B | ✅ |
 
 ### Services (executed / B-side)
 
