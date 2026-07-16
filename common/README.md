@@ -2,8 +2,21 @@
 
 This folder holds the boilerplate that is identical for every example in the
 BACnet profile example series, vendored into this repository so the example
-builds on its own. It lets the profile's `main.cpp` stay short and read like a
-tutorial, focused only on what makes the B-SS profile different.
+builds on its own. It lets each profile's `main.cpp` stay short and read like a
+tutorial, focused only on what makes that profile different.
+
+## Versioning
+
+`common/` carries its **own version**, separate from the example's version:
+the `COMMON_VERSION` constant in `CASExampleHelper.h`, with history in
+[`CHANGELOG.md`](CHANGELOG.md) (this folder's changelog, not the example's).
+`PrintVersion` prints it at start-up. The folder must be **byte-identical** in
+every example of the series — if this copy's version is older than the latest
+`common/` changelog entry elsewhere in the series, the copy is stale.
+
+**Never edit `common/` for one example only.** To change it: edit, bump
+`COMMON_VERSION`, add a changelog entry, then re-copy the folder into every
+example repository.
 
 ## What's here
 
@@ -11,7 +24,8 @@ tutorial, focused only on what makes the B-SS profile different.
 |------|---------|
 | `CASExampleHelper.h` / `.cpp` | UDP socket on the BACnet/IP port + the transport/time callbacks; version/help printing; `--port` / `--deviceID` parsing; keyboard commands (h/q/up/down); local-IPv4 / broadcast helpers; broadcast I-Am on start-up. |
 | `SimpleUDP.h` / `.cpp` | A tiny cross-platform UDP socket wrapper (Winsock on Windows, BSD sockets on Linux/macOS). |
-| `CASBACnetStackExampleConstants.h` | A self-contained copy of the handful of BACnet enumeration values the example uses (each section names the CAS BACnet Stack header that defines the full enumeration). |
+| `CASBACnetStackExampleConstants.h` | A self-contained, series-wide copy of the BACnet enumeration values the examples use (each section names the CAS BACnet Stack header that defines the full enumeration). Identical in every example — the union of what the series needs. |
+| `CHANGELOG.md` | The changelog of this folder itself (see Versioning above). |
 
 ## How `main.cpp` uses it
 

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: CC0-1.0
 // Public-domain example code (CC0) - see LICENSE. The CAS BACnet Stack itself is
 // a separate, commercially licensed product and is not covered by CC0.
 // =============================================================================
@@ -760,6 +760,11 @@ int main(int argc, char** argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
 
     // --- Command line + version --------------------------------------------
+    // --help / --version print and exit, so handle them before we bind a socket
+    // or touch the stack.
+    if (CASExampleHelper::HandleHelpAndVersionArgs(argc, argv, APP_NAME, APP_VERSION)) {
+        return 0;
+    }
     const uint16_t port = CASExampleHelper::ParsePortArg(argc, argv, 47808);
     g_deviceInstance = CASExampleHelper::ParseDeviceIdArg(argc, argv, g_deviceInstance);
     CASExampleHelper::PrintVersion(APP_NAME, APP_VERSION);
