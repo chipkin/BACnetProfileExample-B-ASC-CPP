@@ -21,6 +21,19 @@
 cmake_minimum_required(VERSION 3.15)
 project(BACnetProfileExample_CPP_B_ASC CXX C)
 
+
+# Default to a Release build.
+#
+# Without this, a single-config generator (Unix Makefiles / Ninja - the default
+# on Linux and macOS) leaves CMAKE_BUILD_TYPE EMPTY, and the documented
+# `cmake --build build --config Release` is SILENTLY IGNORED there: --config
+# only means anything to a multi-config generator like Visual Studio. The result
+# is that the whole stack (~460 files) compiles at -O0 and the customer never
+# finds out. Windows is unaffected, which is exactly why this survived so long.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
