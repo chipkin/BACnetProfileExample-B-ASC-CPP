@@ -7,14 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-07-15
+## [1.1.0] - unreleased
+
+> Not tagged yet: `v1.0.0` is the only tag in this repository, so there is no
+> 1.1.0 build. `release.yml` publishes binaries on a `v*.*.*` tag; until that tag
+> exists this section describes what is on the branch, not what shipped.
+
+### Added
+
+- **DM-DOB-B (Who-Has / I-Have) is now advertised.** The device always answered
+  Who-Has, but `Protocol_Services_Supported` is emitted verbatim from the stack's
+  service bitstring, whose defaults are Who-Is + Who-Has + ReadProperty only -
+  `I-Am` and `I-Have` stay false. So the device performed both and told every
+  client it supported neither. Who-Is/I-Am (DM-DDB-B) and Who-Has/I-Have are now
+  enabled explicitly, which is what makes the README's BIBB claims true on the
+  wire.
+- **`Description` on the Device object is now readable.** It was served from a
+  Get callback but never enabled. `Description` is OPTIONAL on a Device, and the
+  stack checks `IsPropertyEnabled` before reaching the callbacks - so the branch
+  was dead code and a client got `unknown-property`.
+- **`Units` on the Analog Output.** Required on an Analog Output as well as an
+  Analog Input; only the input's was served. This does not error - the stack
+  silently substitutes `no-units(95)` - so the setpoint reported no engineering
+  units next to a degC sensor.
+- `--help` / `--version` (via `common/` v1.2.0); `--version` prints the example,
+  stack, and helper versions.
+- A real "add a second analog input" recipe, a per-object-type checklist of what
+  the application must serve, and a who-serves-what table.
+
+### Changed
+
+- **Stack pin moved to the series `6.x` branch (CAS BACnet Stack 6.0.0.0).**
+  Which stack version this example requires is a material licensing fact.
+- The commandable-setup loop carries `{type, instance}` pairs instead of a
+  hardcoded instance `1`, and its comment now states the truth: those calls are
+  a no-op for Analog/Binary/Multi-State Output (the stack treats those as
+  commandable unconditionally) and are load-bearing only for the optionally-
+  commandable Value types.
+- The WriteProperty log prints the real object instance.
 
 ### Fixed
 
+- **DeviceCommunicationControl returned `false` with `*errorCode` unset** when
+  the request targeted a different device instance, putting
+  `Error Code = success(84)` on the wire.
+
 - **Default device instance is now `389003`, not `389001`.** The series
-  [device-instance table](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP)
-  assigns each profile its own default so that several examples can run on one
-  subnet; this example shipped using `389001`, which is **B-SS's** instance. Any
+  device-instance allocation assigns each profile its own default so that several
+  examples can run on one subnet (B-SS `389001`, B-SA `389002`, B-ASC `389003`,
+  ...); this example shipped using `389001`, which is **B-SS's** instance. Any
   two of B-SS / B-ASC running together therefore both claimed device `389001` —
   duplicate device instances on a subnet are a BACnet conformance problem, and
   they make discovery ambiguous in exactly the way that is hardest to debug (see
@@ -62,6 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflow that builds Windows + Linux and publishes a release on
   a `vX.Y.Z` tag, with a smoke-test step before packaging.
 
-[Unreleased]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...v1.1.0
+[Unreleased]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/releases/tag/v1.0.0

@@ -10,6 +10,9 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 Part of the CAS BACnet Stack **BACnet profile example series** - one repository
 per BACnet device profile. This example claims **only** B-ASC.
 
+Reading order: [B-SS (Smart Sensor)](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP) is the **first** example and the one to
+start with, then [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP); this is the **third**.
+
 > **Versions:** this document describes **example v1.1.0**, built and verified
 > against **CAS BACnet Stack 6.0.0.0** at **Protocol_Revision 24**, with the
 > vendored `common/` helper at **v1.2.0**. Running the example prints all three.
@@ -381,7 +384,7 @@ that is easiest to miss is the one BTL will fail you for, and it fails SILENTLY.
 > violation and a hard BTL failure that every scan tool renders as fine.
 > **"It scanned OK" is the failure mode, not evidence against it.**
 
-`cpp
+```cpp
 // 1) a new instance number (in section 1).
 //    Naming: a second object of a type is "<Colour> 2" - so Analog Input 2 is
 //    "Bronze 2", NOT a new colour. Each object TYPE owns one colour series-wide.
@@ -405,7 +408,7 @@ if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_ANALOG_INPUT, ANALOG_IN
 //    this, Analog Input 2's Units silently reads back no-units and the object is
 //    NON-CONFORMANT while looking perfectly healthy.
 //    GetPropertyEnumerated:  AI/2 + Units -> *value = ENGINEERING_UNITS_DEGREES_CELSIUS;
-`
+```
 
 Then read back every required property of Analog Input 2 and **diff it against
 Analog Input 1**. Anything returning `"undefined"`, `no-units`, or `0` where
