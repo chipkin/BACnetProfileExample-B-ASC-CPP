@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <time.h>
 
 #if defined(_WIN32)
@@ -288,13 +289,35 @@ bool HandleHelpAndVersionArgs(const int argc, char** argv, const char* appName, 
     return false;
 }
 
+// Parse a whole-number argument value. Returns true only if the ENTIRE token is
+// a valid non-negative integer. This exists because atoi()/atol() silently
+// return 0 on garbage - so `--deviceID abc` would parse as device 0, a valid
+// instance, and the operator would ship a device answering at the wrong address
+// with no diagnostic. strtol + an end-pointer check is the difference between
+// "rejected your typo" and "silently obeyed a different command than you gave".
+static bool ParseWholeNumber(const char* text, long* out) {
+    if (text == NULL || *text == '\0') {
+        return false;
+    }
+    char* end = NULL;
+    errno = 0;
+    const long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value < 0) {
+        return false; // non-numeric, trailing junk, empty, negative, or overflow
+    }
+    *out = value;
+    return true;
+}
+
 uint16_t ParsePortArg(const int argc, char** argv, const uint16_t defaultPort) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (strcmp(argv[i], "--port") == 0) {
-            const int p = atoi(argv[i + 1]);
-            if (p > 0 && p <= 65535) {
+            long p = 0;
+            if (ParseWholeNumber(argv[i + 1], &p) && p > 0 && p <= 65535) {
                 return (uint16_t)p;
             }
+            printf("Warning: ignoring invalid --port \"%s\" (want 1..65535); using %u.\n",
+                   argv[i + 1], (unsigned)defaultPort);
         }
     }
     return defaultPort;
@@ -303,12 +326,14 @@ uint16_t ParsePortArg(const int argc, char** argv, const uint16_t defaultPort) {
 uint32_t ParseDeviceIdArg(const int argc, char** argv, const uint32_t defaultDeviceId) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (strcmp(argv[i], "--deviceID") == 0) {
-            const long id = atol(argv[i + 1]);
             // 0 .. 4194302 is the valid BACnet device instance range (4194303 is
             // the "unconfigured" wildcard and is not a usable instance).
-            if (id >= 0 && id < 4194303) {
+            long id = 0;
+            if (ParseWholeNumber(argv[i + 1], &id) && id < 4194303) {
                 return (uint32_t)id;
             }
+            printf("Warning: ignoring invalid --deviceID \"%s\" (want 0..4194302); using %u.\n",
+                   argv[i + 1], (unsigned)defaultDeviceId);
         }
     }
     return defaultDeviceId;

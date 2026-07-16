@@ -15,7 +15,7 @@ start with, then [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfil
 
 > **Versions:** this document describes **example v1.1.0**, built and verified
 > against **CAS BACnet Stack 6.0.0.0** at **Protocol_Revision 24**, with the
-> vendored `common/` helper at **v1.2.0**. Running the example prints all three.
+> vendored `common/` helper at **v1.3.0**. Running the example prints all three.
 
 ## Quickstart
 
@@ -32,9 +32,9 @@ cmake --build build --config Release
 ```
 
 The device announces itself, answers Who-Is, and prints `Press 'h' for help`.
-The first build compiles the whole stack (~460 files) and takes a few minutes.
+The first build compiles the whole stack (~600 files) and takes a few minutes.
 
-> **You will see a wall of red `Error:` lines at start-up. The device is fine** —
+> **You will see one or more red `Error:` lines at start-up. The device is fine** —
 > it hears its own broadcast I-Am and the stack logs a benign decode cascade. See
 > [Troubleshooting](#troubleshooting).
 
@@ -68,8 +68,11 @@ adds the requirement to respond to communication-control messages.
   to **DeviceCommunicationControl** - a management station can tell the device to
   stop or resume communicating (optionally for a time period, optionally behind a
   password). This is what distinguishes a B-ASC from a B-SA.
-- **Discovery:** the device must be findable, so it answers **Who-Is** with
-  **I-Am**, and announces itself with an unsolicited I-Am at start-up.
+- **Device Management - Dynamic Device Binding - B side (DM-DDB-B):** answer
+  **Who-Is** with **I-Am**, and announce itself with an unsolicited I-Am at
+  start-up, so a client can discover the device.
+- **Device Management - Dynamic Object Binding - B side (DM-DOB-B):** answer
+  **Who-Has** with **I-Have**, so a client can locate an object by name or ID.
 
 **What the profile does NOT require** - and this example therefore omits on
 purpose: **alarming / event reporting**, **scheduling**, and **trending**.
@@ -232,7 +235,7 @@ application (stack + example):
 
 | Platform | Binary | Size |
 |----------|--------|------|
-| Windows x64 (MSVC, Release) | `BACnetExampleBASC.exe` | ~2.6 MB |
+| Windows x64 (MSVC, Release) | `BACnetExampleBASC.exe` | ~3.0 MB |
 | Linux x64 (GCC, Release) | `BACnetExampleBASC` | ~6 MB unstripped (`strip` cuts it substantially) |
 
 These are whole-application sizes. The stack's flash/RAM footprint on a
@@ -279,7 +282,7 @@ cmake --build build --config Release
 ```
 
 > **First build takes a few minutes** - it compiles the entire CAS BACnet Stack
-> (~460 source files) once. Incremental rebuilds after that are fast.
+> (~600 source files) once. Incremental rebuilds after that are fast.
 
 If your CAS BACnet Stack lives somewhere other than the bundled submodule, point
 CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
@@ -299,9 +302,10 @@ Expected output:
 ```
 BACnet B-ASC (Application Specific Controller) Example - C++ v1.1.0
 CAS BACnet Stack version: 6.0.0.0
-Common helper (common/) version: 1.2.0
+Common helper (common/) version: 1.3.0
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
+... (one or more red "Error:" lines here - expected and benign; see Troubleshooting) ...
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
 ```
 
@@ -349,7 +353,7 @@ Use a BACnet client such as the
 
 1. **Discover** - send a **Who-Is**. The device replies with **I-Am** from
    instance **389003** (vendor **389**). It also broadcasts an I-Am at start-up.
-2. **Browse the object model** - the device shows seven objects: the Device
+2. **Browse the object model** - the device shows eight objects: the Device
    (`Rainbow`), three inputs, three outputs, and the Network Port (`Vermilion`).
 3. **Read the Device** - ReadProperty `389003` -> `Object_Name` = `"Rainbow"`;
    `Protocol_Revision` = `24`; `Description` = the profile description string.
@@ -369,11 +373,11 @@ Use a BACnet client such as the
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC datalink these IP-only examples never configure. It appears once and does not spam. On a healthy start-up roughly half the output is these lines. |
+| On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC datalink these IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line (just the UUID one); on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
 | CMake error: *"CAS BACnet Stack source not found"* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |
-| First build seems stuck for minutes | Normal - it's compiling ~460 stack files. Only the first build is slow. |
+| First build seems stuck for minutes | Normal - it's compiling ~600 stack files. Only the first build is slow. |
 | `git submodule update` fails with *Permission denied* / *repository not found* | The CAS BACnet Stack submodule is a **private** repo. You need a stack licence and access granted to your GitHub account, plus working SSH keys or a credential helper. See [Requires the CAS BACnet Stack](#requires-the-cas-bacnet-stack-licensed-product). |
 | App prints *"Failed to bind UDP port 47808"* | Another BACnet program is already using 47808. Stop it, or run with `--port <n>`. |
 | DeviceCommunicationControl `disable` returns an error | Expected. The plain `disable` value is deprecated at Protocol_Revision >= 20; use `disable-initiation` instead. |
@@ -510,4 +514,4 @@ public domain under [CC0-1.0](LICENSE) - use it for anything, no attribution
 required. The CAS BACnet Stack is a separate, commercially licensed product and
 is not covered by CC0.
 
-See also [CHANGELOG.md](CHANGELOG.md) and [AGENTS.md](AGENTS.md).
+See also [CHANGELOG.md](CHANGELOG.md). Contributors and AI agents: [AGENTS.md](AGENTS.md) documents the repo conventions.

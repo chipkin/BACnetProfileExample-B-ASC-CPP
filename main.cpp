@@ -515,6 +515,14 @@ static bool ReturnCharacterString(const char* text, char* value,
                                   uint8_t* encodingType) {
     uint32_t length = (uint32_t)strlen(text);
     if (length > maxElementCount) {
+        // Truncate SILENTLY to fit the stack's buffer. maxElementCount is
+        // MAX_CHARACTER_STRING_SIZE (256 in this build), and our longest string
+        // (DEVICE_DESCRIPTION) fits with room to spare - so this never trips
+        // here. But if you build with BACNET_TARGET_EMBEDDED, that limit drops to
+        // 64, and a long Object_Name or Description would be clipped mid-word
+        // with nothing on the wire or console to tell you. If you lengthen any
+        // served string, check it against MAX_CHARACTER_STRING_SIZE for your
+        // target, or make this truncation loud.
         length = maxElementCount;
     }
     memcpy(value, text, length);

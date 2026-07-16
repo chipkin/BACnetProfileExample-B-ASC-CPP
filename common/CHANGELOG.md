@@ -12,6 +12,18 @@ entry here, and must then be re-copied into **every** example in the series.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-16
+
+### Changed
+
+- **`ParsePortArg` / `ParseDeviceIdArg` now reject non-numeric input instead of
+  silently accepting it.** They used `atoi`/`atol`, which return `0` on garbage -
+  so `--deviceID abc` parsed as device **0** (a valid instance) and the operator
+  shipped a device answering at the wrong address with no diagnostic. Both now
+  validate the whole token with `strtol` + an end-pointer check (new
+  `ParseWholeNumber` helper) and print a `Warning:` naming the bad value and the
+  default they fell back to. Added `#include <errno.h>`.
+
 ## [1.2.0] - 2026-07-15
 
 The **reconciliation release**: this is the first version that is genuinely
