@@ -7,8 +7,9 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 **WriteProperty** to its commandable outputs, responds to
 **DeviceCommunicationControl**, and is discoverable via **Who-Is / I-Am**.
 
-> **Versions:** this document describes **example v1.0.0**, built and verified
-> against **CAS BACnet Stack 5.4.2.0** at **Protocol_Revision 24**.
+> **Versions:** this document describes **example v1.1.0**, built and verified
+> against **CAS BACnet Stack 6.0.0.0** at **Protocol_Revision 24**, with the
+> vendored `common/` helper at **v1.2.0**. Running the example prints all three.
 
 This is the third example in the series. It builds directly on the
 [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP)
@@ -234,12 +235,18 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-ASC (Application Specific Controller) Example - C++ v1.0.0
-CAS BACnet Stack version: 5.4.2.0
+BACnet B-ASC (Application Specific Controller) Example - C++ v1.1.0
+CAS BACnet Stack version: 6.0.0.0
+Common helper (common/) version: 1.2.0
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
 ```
+
+Those first three lines are worth reading: they tell you the **example** version,
+the **stack** version you actually linked, and the version of the vendored
+`common/` helper — which is how you tell whether this repo's copy has drifted from
+the rest of the series.
 
 The `TX` line is the start-up I-Am the device broadcasts to announce itself. It
 goes to the **local subnet broadcast** address (here `192.168.3.255`, computed

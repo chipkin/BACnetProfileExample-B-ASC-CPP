@@ -130,7 +130,8 @@ static uint16_t g_bacnetIpUdpPort = 47808;
 static float g_analogInput1Value = 21.5f;
 
 // The commandable OUTPUT objects (all instance 1) and their colour names. These
-// are what make this a B-SA actuator: clients drive them with WriteProperty.
+// are inherited verbatim from B-SA, which defines this pattern for the series:
+// clients drive them with WriteProperty (DS-WP-B).
 static const uint32_t ANALOG_OUTPUT_INSTANCE = 1;        // "Chartreuse"
 static const uint32_t BINARY_OUTPUT_INSTANCE = 1;        // "Fuchsia"
 static const uint32_t MULTI_STATE_OUTPUT_INSTANCE = 1;   // "Indigo"
@@ -551,7 +552,7 @@ bool GetPropertyCharString(const uint32_t deviceInstance, const uint16_t objectT
 }
 
 // -----------------------------------------------------------------------------
-// 2b. Property "set" callbacks - the heart of B-SA (DS-WP-B)
+// 2b. Property "set" callbacks - DS-WP-B (identical to B-SA, which defines them)
 //
 // The stack calls these when a client sends WriteProperty to a commandable
 // output's Present_Value. The value arrives already decoded into the matching
@@ -843,7 +844,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // --- Add the commandable OUTPUT objects (the B-SA additions) -------------
+    // --- Add the commandable OUTPUT objects (inherited from B-SA) ------------
     // These accept WriteProperty. We make each one commandable below.
     if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_ANALOG_OUTPUT, ANALOG_OUTPUT_INSTANCE)) {
         printf("Error: Failed to add Analog Output 1 (Chartreuse).\n");
