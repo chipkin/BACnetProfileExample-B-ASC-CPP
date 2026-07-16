@@ -31,7 +31,7 @@ cmake -B build -S .
 cmake --build build --config Release
 ```
 
-The first build compiles the whole stack (~460 files) and takes a few minutes;
+The first build compiles the whole stack (~600 files) and takes a few minutes;
 later incremental builds are fast. Use `-D CAS_STACK_DIR=...` only if your stack
 lives outside the bundled submodule.
 

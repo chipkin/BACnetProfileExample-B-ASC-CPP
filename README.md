@@ -81,7 +81,7 @@ purpose: **alarming / event reporting**, **scheduling**, and **trending**.
 standard object model - a **Device** object, a **Network Port** object (every
 device needs one), and its objects - and each object must expose all of its
 **required properties**. The CAS BACnet Stack generates most of those
-automatically (Object_Identifier, Object_Type, Status_Flags, Event_State,
+automatically (Object_Identifier, Object_Type, Status_Flags,
 Object_List, Protocol_*, ...); this example supplies the handful that are
 application-specific. The result is conformant for **Protocol_Revision 24**.
 
@@ -120,7 +120,7 @@ Device 389003  "Rainbow"   (Vendor 389 - Chipkin Automation Systems)
     ├── Binary Input  1       "Emerald"     Present_Value  inactive  (0 = inactive / 1 = active; read-only)
     ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
     ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
-    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
+    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive  (0/1; WRITABLE, commandable)
     ├── Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
     └── Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
 ```
