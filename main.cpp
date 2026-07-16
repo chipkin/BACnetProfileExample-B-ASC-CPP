@@ -80,6 +80,14 @@ static const char* APP_VERSION = "1.1.0";
 // to 389003 and can be overridden on the command line with --deviceID.
 static uint32_t g_deviceInstance = 389003;
 
+// ---- Device identity: CHANGE ALL OF THIS BEFORE YOU SHIP --------------------
+// Everything in this block is read by clients and shown to the operator in every
+// discovery tool on the network. Left as-is, your product will appear on a real
+// site announcing itself as a Chipkin demo. None of it is cosmetic:
+// Object_Name must be unique across the BACnet internetwork, and Model_Name /
+// Vendor_Identifier are what a building operator uses to identify your device.
+// -----------------------------------------------------------------------------
+
 // Your BACnet Vendor Identifier. 389 = Chipkin Automation Systems; change this
 // to YOUR company's vendor ID before shipping a product. Vendor IDs are assigned
 // by ASHRAE - request one (free) at https://bacnet.org/assigned-vendor-ids/.
@@ -106,6 +114,7 @@ static const char* APPLICATION_SOFTWARE_VERSION = "1.0.0";
 
 // The sensor objects (all instance 1) and their colour names.
 static const uint32_t ANALOG_INPUT_INSTANCE = 1;       // "Bronze"
+static const uint32_t ANALOG_INPUT_2_INSTANCE = 2;     // "Cobalt"
 static const uint32_t BINARY_INPUT_INSTANCE = 1;       // "Emerald"
 static const uint32_t MULTI_STATE_INPUT_INSTANCE = 1;  // "Hot Pink"
 static const uint32_t MULTI_STATE_INPUT_NUMBER_OF_STATES = 3;
@@ -212,7 +221,22 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
 // The stack calls these when a client reads a property. For each data type the
 // stack uses a separate callback. We return true (and fill *value) when we
 // recognise the (object, property) pair, and false otherwise so the stack
-// answers with the proper BACnet error.
+// answers with the proper BACnet error. Note what false does NOT mean: it is not
+// "the read failed", and it is not "the value is null". It means "not mine" -
+// you are declining to answer, and the stack turns that into a BACnet error.
+//
+// ADDING AN OBJECT? READ THIS FIRST.
+// These callbacks are not uniformly strict, and the difference bites:
+//   - GetPropertyReal / GetPropertyEnumerated / GetPropertyUnsignedInteger match
+//     on object type AND INSTANCE (directly, or via GetCommandable(), which
+//     looks up the exact type+instance pair). A new instance falls through every
+//     one of those checks and gets an error.
+//   - GetPropertyBool serves Out_Of_Service on object TYPE ONLY, so a new
+//     instance of an existing type gets Out_Of_Service for free.
+// So a half-added object answers Out_Of_Service but errors on Present_Value and
+// Units - i.e. it looks alive on a scan and is non-conformant. When you add an
+// instance, walk EVERY callback below, then read back every required property of
+// the new object. The README's "Extending the example" recipe lists the edits.
 // -----------------------------------------------------------------------------
 
 // REAL (floating point) - the Analog Input's Present_Value.
@@ -233,6 +257,12 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
         // delays all BACnet processing. Sample the sensor on a timer/another
         // thread and just hand back the latest value from here.
         *value = g_analogInput1Value;
+        return true;
+    }
+    if (objectType == OBJECT_TYPE_ANALOG_INPUT &&
+        objectInstance == ANALOG_INPUT_2_INSTANCE &&
+        propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
+        *value = 42.0f;
         return true;
     }
     // Analog Output (commandable): serve its Priority_Array slots and
@@ -705,27 +735,42 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
                                 const bool useTimeDuration, const uint16_t timeDuration,
                                 uint32_t* errorCode) {
     if (deviceInstance != g_deviceInstance) {
+        // Not our device. Set *errorCode even here - see the note at the end of
+        // this function: a false return with *errorCode unset ships
+        // "Error Code = success(84)", which is meaningless on the wire.
+        *errorCode = ERROR_CODE_OPTIONAL_FUNCTIONALITY_NOT_SUPPORTED;
         return false;
     }
 
     // Check the password if this device requires one. A device with no configured
     // password (DCC_PASSWORD == "") accepts any request.
     //
-    // The compare is length-checked first (so memcmp never reads past the wire
-    // buffer, which is NOT null-terminated) and folds the byte comparison into a
-    // single accumulator so it does not short-circuit on the first wrong byte -
-    // a constant-time-style compare that avoids leaking how much of the password
-    // matched via timing. On a mismatch we set *errorCode = password-failure; the
-    // stack pairs that with Error Class = SECURITY (see clause 16.1.1.3.1).
+    // Compare by LENGTH FIRST, then bytes. The reason is not buffer safety - the
+    // stack hands us a null-terminated string - it is that a BACnet
+    // CharacterString may legitimately contain embedded NULs, and strcmp would
+    // silently compare only up to the first one. Never strcmp a wire string.
+    //
+    // On a mismatch we set *errorCode = password-failure, and the stack pairs
+    // that specific code with Error Class = SECURITY (clause 16.1.1.3.1).
+    //
+    // NOTE ON SECURITY, because this is a tutorial and the honest answer matters:
+    // a DCC password crosses the wire in PLAINTEXT. This is not a security
+    // boundary - it is a guard against accidents. Anyone who can time this
+    // compare can simply sniff the password instead. If you need real protection,
+    // use BACnet/SC. (Do not read the accumulator loop below as a constant-time
+    // compare: the printf on the reject path dwarfs any timing signal it removes.)
     const size_t requiredLength = strlen(DCC_PASSWORD);
     if (requiredLength > 0) {
-        unsigned diff = (password == NULL) ? 1u : (unsigned)(passwordLength ^ requiredLength);
-        if (password != NULL && passwordLength == requiredLength) {
+        bool matches = (password != NULL) && (passwordLength == requiredLength);
+        if (matches) {
             for (size_t i = 0; i < requiredLength; ++i) {
-                diff |= (unsigned)((unsigned char)password[i] ^ (unsigned char)DCC_PASSWORD[i]);
+                if (password[i] != DCC_PASSWORD[i]) {
+                    matches = false;
+                    break;
+                }
             }
         }
-        if (diff != 0) {
+        if (!matches) {
             printf("DeviceCommunicationControl: REJECTED (password failure)\n");
             *errorCode = ERROR_CODE_PASSWORD_FAILURE;
             return false;
@@ -745,11 +790,22 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
     } else {
         printf("DeviceCommunicationControl: %s (indefinitely)\n", action);
     }
-    // Return true to accept. We do NOT set *errorCode here: when a callback
-    // returns false without setting it, the stack supplies a sensible default
-    // error; we only write *errorCode to override that with a specific one (as the
-    // password path above does, and as the SetProperty* callbacks do for
-    // value-out-of-range).
+    // Accept. Nothing to write to *errorCode on the success path.
+    //
+    // IMPORTANT, AND IT IS NOT WHAT YOU WOULD GUESS: this callback MUST set
+    // *errorCode on EVERY `false` return. The DCC path has no default. The stack
+    // pre-initialises errorCode to BACnetErrorCode::success (which is 84, NOT 0)
+    // and then, on a false return, does:
+    //     if (errorCode == passwordFailure) -> Error Class SECURITY
+    //     else                              -> Error Class SERVICES, code = errorCode
+    // So returning false without setting *errorCode puts the literal nonsense
+    // "Error Class = SERVICES, Error Code = success(84)" on the wire.
+    //
+    // This differs from the SetProperty* callbacks, which DO have a sensible
+    // fallback (writeAccessDenied) - so do not carry the habit across.
+    // (The stack's own comment at that site says "otherwise assume
+    // passwordFailure"; the code does not do that. Trust the code, not the
+    // comment - including this one: go read it.)
     return true;
 }
 
@@ -835,6 +891,10 @@ int main(int argc, char** argv) {
         printf("Error: Failed to add Analog Input 1 (Bronze).\n");
         return 1;
     }
+    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_ANALOG_INPUT, ANALOG_INPUT_2_INSTANCE)) {
+        printf("Error: Failed to add Analog Input 2 (Cobalt).\n");
+        return 1;
+    }
     if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_BINARY_INPUT, BINARY_INPUT_INSTANCE)) {
         printf("Error: Failed to add Binary Input 1 (Emerald).\n");
         return 1;
@@ -901,17 +961,26 @@ int main(int argc, char** argv) {
     // device still starts, still answers Who-Is, and looks perfectly healthy while
     // rejecting every WriteProperty. That is the worst kind of failure to debug,
     // and it is exactly what an unchecked return buys you.
-    const uint16_t outputTypes[] = {
-        OBJECT_TYPE_ANALOG_OUTPUT, OBJECT_TYPE_BINARY_OUTPUT, OBJECT_TYPE_MULTI_STATE_OUTPUT
+    // Carry the INSTANCE alongside the type. This loop used to hardcode a literal
+    // 1 for the instance while every other line in the file used the named
+    // constants - so changing ANALOG_OUTPUT_INSTANCE would silently leave this
+    // loop behind, and the object would start, answer Who-Is, and reject every
+    // WriteProperty. Exactly the failure the comment above warns about.
+    struct CommandableObject { uint16_t type; uint32_t instance; };
+    const CommandableObject outputs[] = {
+        { OBJECT_TYPE_ANALOG_OUTPUT,      ANALOG_OUTPUT_INSTANCE },
+        { OBJECT_TYPE_BINARY_OUTPUT,      BINARY_OUTPUT_INSTANCE },
+        { OBJECT_TYPE_MULTI_STATE_OUTPUT, MULTI_STATE_OUTPUT_INSTANCE },
     };
-    for (size_t i = 0; i < sizeof(outputTypes) / sizeof(outputTypes[0]); ++i) {
-        if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
+    for (size_t i = 0; i < sizeof(outputs) / sizeof(outputs[0]); ++i) {
+        if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, outputs[i].type, outputs[i].instance,
                                             PROPERTY_IDENTIFIER_PRIORITY_ARRAY, true) ||
-            !BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
+            !BACnetStack_SetPropertyEnabled(g_deviceInstance, outputs[i].type, outputs[i].instance,
                                             PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT, true) ||
-            !BACnetStack_SetPropertyWritable(g_deviceInstance, outputTypes[i], 1,
+            !BACnetStack_SetPropertyWritable(g_deviceInstance, outputs[i].type, outputs[i].instance,
                                              PROPERTY_IDENTIFIER_PRESENT_VALUE, true)) {
-            printf("Error: Failed to make object type %u instance 1 commandable.\n", outputTypes[i]);
+            printf("Error: Failed to make object type %u instance %u commandable.\n",
+                   outputs[i].type, outputs[i].instance);
             return 1;
         }
     }

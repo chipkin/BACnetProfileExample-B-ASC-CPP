@@ -7,6 +7,9 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 **WriteProperty** to its commandable outputs, responds to
 **DeviceCommunicationControl**, and is discoverable via **Who-Is / I-Am**.
 
+Part of the CAS BACnet Stack **BACnet profile example series** - one repository
+per BACnet device profile. This example claims **only** B-ASC.
+
 > **Versions:** this document describes **example v1.1.0**, built and verified
 > against **CAS BACnet Stack 6.0.0.0** at **Protocol_Revision 24**, with the
 > vendored `common/` helper at **v1.2.0**. Running the example prints all three.
@@ -84,7 +87,7 @@ Set it to your device's secret to require one; a mismatch is rejected with
 Device 389003  "Rainbow"   (Vendor 389 - Chipkin Automation Systems)
     │
     ├── Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
-    ├── Binary Input  1       "Emerald"     Present_Value  active  (0 = inactive / 1 = active; read-only)
+    ├── Binary Input  1       "Emerald"     Present_Value  inactive  (0 = inactive / 1 = active; read-only)
     ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
     ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
     ├── Binary Output 1       "Fuchsia"     Present_Value  inactive(0/1; WRITABLE, commandable)
@@ -149,8 +152,10 @@ BACnet Stack license and access to that repository.
 Chipkin:** <https://store.chipkin.com/services/stacks/bacnet-stack> or
 sales@chipkin.com.
 
-You can still read all of this example's source on GitHub to evaluate the
-approach and the amount of code involved.
+You do not need a stack licence to *read* this example. Every file outside
+submodules/ is CC0 public domain, so once you have access to this repository you
+can review the approach and the amount of code involved before you buy. The licence
+is what lets you *build* it - that is the part the stack submodule gates.
 
 ## What's in this repository
 
@@ -265,6 +270,8 @@ firewall. To use a different port, pass `--port` (see below).
 |--------|---------|---------|
 | `--port <n>` | `47808` | UDP port to listen on (BACnet/IP). |
 | `--deviceID <n>` | `389003` | The device's BACnet instance number (BACnet requires this to be configurable). |
+| `--help`, `-h` | - | Show usage and exit. |
+| `--version` | - | Print the example, stack, and `common/` helper versions, then exit. |
 
 ### Interactive commands
 
@@ -309,6 +316,7 @@ Use a BACnet client such as the
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |
 | First build seems stuck for minutes | Normal - it's compiling ~460 stack files. Only the first build is slow. |
+| `git submodule update` fails with *Permission denied* / *repository not found* | The CAS BACnet Stack submodule is a **private** repo. You need a stack licence and access granted to your GitHub account, plus working SSH keys or a credential helper. See [Requires the CAS BACnet Stack](#requires-the-cas-bacnet-stack-licensed-product). |
 | App prints *"Failed to bind UDP port 47808"* | Another BACnet program is already using 47808. Stop it, or run with `--port <n>`. |
 | DeviceCommunicationControl `disable` returns an error | Expected. The plain `disable` value is deprecated at Protocol_Revision >= 20; use `disable-initiation` instead. |
 | WriteProperty to an output is rejected | Write to the **output** objects, not the inputs (inputs are read-only sensors), and keep the value in range. |
