@@ -346,9 +346,16 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
             return true;
         }
     }
-    if (objectType == OBJECT_TYPE_ANALOG_INPUT &&
-        objectInstance == ANALOG_INPUT_INSTANCE &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_UNITS) {
+    // Units is REQUIRED on an Analog Input AND on an Analog Output. Serve BOTH.
+    // If you only serve the input's, the output does not error - it silently
+    // reports no-units(95), because Units is not in the stack's
+    // valueShouldBeInitialized list and so falls through to a substituted default
+    // (see the note at the top of this section). A setpoint that reads back "no
+    // units" next to a degC sensor is the kind of thing nobody notices until
+    // commissioning.
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_UNITS &&
+        ((objectType == OBJECT_TYPE_ANALOG_INPUT && objectInstance == ANALOG_INPUT_INSTANCE) ||
+         (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE))) {
         *value = ENGINEERING_UNITS_DEGREES_CELSIUS;
         return true;
     }
@@ -627,8 +634,8 @@ bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
         //         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE; return false;
         //     }
         CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Analog Output 1 (Chartreuse) <- %.2f @ priority %u\n",
-               value, EffectivePriority(priority));
+        printf("WriteProperty: Analog Output %u (Chartreuse) <- %.2f @ priority %u\n",
+               objectInstance, value, EffectivePriority(priority));
         return true;
     }
     return false;
@@ -656,8 +663,8 @@ bool SetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
             return false;
         }
         CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Binary Output 1 (Fuchsia) <- %s @ priority %u\n",
-               value ? "active" : "inactive", EffectivePriority(priority));
+        printf("WriteProperty: Binary Output %u (Fuchsia) <- %s @ priority %u\n",
+               objectInstance, value ? "active" : "inactive", EffectivePriority(priority));
         return true;
     }
     return false;
@@ -684,8 +691,8 @@ bool SetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
             return false;
         }
         CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Multi-State Output 1 (Indigo) <- state %u @ priority %u\n",
-               value, EffectivePriority(priority));
+        printf("WriteProperty: Multi-State Output %u (Indigo) <- state %u @ priority %u\n",
+               objectInstance, value, EffectivePriority(priority));
         return true;
     }
     return false;
@@ -893,6 +900,23 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Discovery: Who-Is/I-Am (DM-DDB-B) and Who-Has/I-Have (DM-DOB-B).
+    //
+    // These need enabling even though the device already ANSWERS them. The
+    // stack's service defaults are whoIs + whoHas + readProperty only
+    // (BACnetDBDevice.cpp) - iAm and iHave are left FALSE. Who-Is is answered and
+    // the start-up I-Am is sent regardless, because neither is gated on the bit;
+    // but Protocol_Services_Supported is emitted verbatim from that bitstring, so
+    // without these calls the device DOES I-Am and I-Have while telling every
+    // client it supports neither. The README claims DM-DDB-B and DM-DOB-B; this
+    // is what makes the claim true on the wire.
+    if (!BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_WHO_IS, true) ||
+        !BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_I_AM, true) ||
+        !BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_WHO_HAS, true) ||
+        !BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_I_HAVE, true)) {
+        printf("Error: Failed to enable the discovery services (Who-Is/I-Am, Who-Has/I-Have).\n");
+        return 1;
+    }
     // --- Add the read-only sensor objects -----------------------------------
     // Every stack setup call returns a bool; a real device should always check
     // it, so this example does too.
