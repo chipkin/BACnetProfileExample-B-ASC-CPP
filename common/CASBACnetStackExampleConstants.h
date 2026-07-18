@@ -151,11 +151,19 @@ static const uint8_t NETWORK_TYPE_IP = 0;
 static const uint8_t NETWORK_PORT_NETWORK_TYPE_IPV4 = 5;
 
 // -- Network Port object protocol level (BACnetProtocolLevel enumeration, used
-//    by BACnetStack_AddNetworkPortObject).
+//    by BACnetStack_AddNetworkPortObjectWithNetworkNumber).
 //    Full list: submodules/cas-bacnet-stack/source/BACnetProtocolLevel.h
 static const uint8_t NETWORK_PORT_PROTOCOL_LEVEL_BACNET_APPLICATION = 2;
 // The lowest protocol layer references this sentinel instead of another port.
 static const uint32_t NETWORK_PORT_REFERENCE_PORT_NONE = 4194303;
+
+// -- Network_Number_Quality (BACnetNetworkNumberQuality, cl. 12.56.11). Says how
+//    the port learned its Network_Number. A port that has not been told and has
+//    not learned one reports "unknown" with Network_Number = 0.
+static const uint8_t NETWORK_NUMBER_QUALITY_UNKNOWN = 0;
+static const uint8_t NETWORK_NUMBER_QUALITY_LEARNED = 1;
+static const uint8_t NETWORK_NUMBER_QUALITY_LEARNED_CONFIGURED = 2;
+static const uint8_t NETWORK_NUMBER_QUALITY_CONFIGURED = 3;
 
 // -- Character string encoding (the encoding byte returned by the character-
 //    string Get callback). 0 = UTF-8. The BACnet character-set values are

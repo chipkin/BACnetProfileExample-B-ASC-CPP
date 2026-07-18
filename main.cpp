@@ -962,10 +962,15 @@ int main(int argc, char** argv) {
     // Every BACnet device (Protocol_Revision 17+) must have at least one Network
     // Port object describing the port it talks on. This one is the BACnet/IP
     // application port; it is the lowest layer, so its reference port is "none".
-    if (!BACnetStack_AddNetworkPortObject(
+    // v6: the old AddNetworkPortObject was removed - use the WithNetworkNumber
+    // form. networkNumber 0 + quality "unknown" reproduce the old behaviour (a
+    // local port that has not learned its network number).
+    if (!BACnetStack_AddNetworkPortObjectWithNetworkNumber(
             g_deviceInstance, NETWORK_PORT_INSTANCE,
             NETWORK_PORT_NETWORK_TYPE_IPV4,
             NETWORK_PORT_PROTOCOL_LEVEL_BACNET_APPLICATION,
+            0,  // networkNumber: not configured
+            NETWORK_NUMBER_QUALITY_UNKNOWN,
             NETWORK_PORT_REFERENCE_PORT_NONE)) {
         printf("Error: Failed to add Network Port 1 (Vermilion).\n");
         return 1;
