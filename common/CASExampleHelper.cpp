@@ -237,9 +237,68 @@ void EnableRawInput() {
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// Deferred-restart state (see the DM-RD-B block in CASExampleHelper.h).
+//
+// The clock here must be MONOTONIC, not wall-clock: a device that supports
+// TimeSynchronization (DM-TS-B) can have its wall clock stepped - possibly
+// backwards - by a management station at any moment, including during the
+// restart delay. time() would then either fire the restart early or park it in
+// the future indefinitely. A monotonic source cannot be stepped.
+// ---------------------------------------------------------------------------
+bool g_restartPending = false;
+uint64_t g_restartDueAtMs = 0;
+CASExampleHelper::RestartKind g_restartKind = CASExampleHelper::RestartKind::Warm;
+
+uint64_t MonotonicMilliseconds() {
+#if defined(_WIN32)
+    // GetTickCount64 (not GetTickCount): the 32-bit version wraps to zero after
+    // ~49.7 days of uptime, which would make a pending deadline unreachable.
+    return (uint64_t)GetTickCount64();
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000);
+#endif
+}
+
 } // namespace
 
 namespace CASExampleHelper {
+
+void RequestRestart(const RestartKind kind, const uint32_t delayMilliseconds) {
+    const uint64_t dueAt = MonotonicMilliseconds() + (uint64_t)delayMilliseconds;
+
+    if (g_restartPending) {
+        // Never postpone a restart already promised to an earlier client: keep
+        // the earliest deadline, and let a Cold request upgrade a pending Warm.
+        if (dueAt < g_restartDueAtMs) {
+            g_restartDueAtMs = dueAt;
+        }
+        if (kind == RestartKind::Cold) {
+            g_restartKind = RestartKind::Cold;
+        }
+        return;
+    }
+
+    g_restartPending = true;
+    g_restartDueAtMs = dueAt;
+    g_restartKind = kind;
+}
+
+bool RestartDue(RestartKind* const outKind) {
+    if (!g_restartPending || MonotonicMilliseconds() < g_restartDueAtMs) {
+        return false;
+    }
+    // Clear BEFORE returning true so this fires exactly once.
+    g_restartPending = false;
+    if (outKind != NULL) {
+        *outKind = g_restartKind;
+    }
+    return true;
+}
 
 void PrintVersion(const char* appName, const char* appVersion) {
     printf("%s v%s\n", appName, appVersion);

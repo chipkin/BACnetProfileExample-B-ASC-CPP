@@ -12,6 +12,48 @@ entry here, and must then be re-copied into **every** example in the series.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-18
+
+### Added
+
+- **`RequestRestart()` / `RestartDue()` — the deferred-restart pattern for
+  `ReinitializeDevice` (DM-RD-B).** A `ReinitializeDevice` callback must not
+  restart the device inside the callback: returning `true` only *encodes* the
+  SimpleACK, which does not reach the wire until a later `BACnetStack_Tick()`.
+  Restarting (or exiting, or resetting) before that tick means the ACK is never
+  transmitted and the client reports a timeout against a device that did exactly
+  what it was asked — the classic DM-RD-B interop bug. The callback now records a
+  deadline and returns; the main loop restarts once the deadline passes.
+  Adopted by B-AAC (the only example in the series whose profile includes
+  DM-RD-B); the helper is inert in every example that never calls it. Adoption
+  checklist in `docs/deferred-restart-adoption.md` (B-AAC).
+  - The deadline uses a **monotonic** clock (`GetTickCount64` / `CLOCK_MONOTONIC`),
+    not `time()`: a device supporting DM-TS-B can have its wall clock stepped
+    backwards by a management station mid-delay, which would strand or prematurely
+    fire the pending restart.
+  - Repeat requests keep the **earliest** deadline (a second client cannot
+    postpone a restart already promised to the first) and let Cold upgrade a
+    pending Warm.
+
+### Fixed
+
+- **B-OD's `CASBACnetStackExampleConstants.h` was stale** — it never received the
+  `NETWORK_NUMBER_QUALITY_*` constants or the
+  `AddNetworkPortObjectWithNetworkNumber` comment update from the 2026-07-17
+  item-16 migration, because B-OD was the one example that did not itself need the
+  migrated call. That silently broke the folder's byte-identical guarantee (the
+  rule this file states, and that parent-repo CI enforces) in a repo where nothing
+  failed to compile. Re-synced with this release's sweep.
+
+### Notes
+
+- The folder is verified **content-identical in all eight examples** as of this
+  release. A working-tree scan on Windows shows CRLF in six repos and LF in two,
+  which looks like drift but is not: every committed blob is LF in all eight, and
+  the difference is local `core.autocrlf` checkout behaviour. Compare with
+  `git show HEAD:common/<file>`, or `diff --strip-trailing-cr`, when auditing this
+  — a naive working-tree `diff -r` reports eight files of phantom drift.
+
 ## [1.3.0] - 2026-07-16
 
 ### Changed
