@@ -55,10 +55,36 @@ bool SimpleUDP::Connect(const uint16_t localPort) {
         return false;
     }
 
-    // Allow rebinding the port quickly (e.g. when restarting the example).
+    // Port-sharing policy. Read this before copying it into a product.
+    //
+    // BACnet/IP allows several devices to share UDP 47808 on one host, and that
+    // is genuinely useful while developing (run two examples at once). But it has
+    // a nasty failure mode: a STALE instance - or any other BACnet program - can
+    // answer requests meant for your device, and a perfectly correct device then
+    // looks broken. That is a classic day-one BACnet debugging trap.
+    //
+    // Windows and POSIX disagree about what SO_REUSEADDR means, so we do not use
+    // the same option on both:
+    //
+    //   POSIX  - SO_REUSEADDR here mainly lets us rebind quickly after a restart
+    //            (skipping TIME_WAIT). We keep it: restarting the example is the
+    //            common case, and it is what makes multi-device testing possible.
+    //   Windows- SO_REUSEADDR is far more permissive: it lets ANY other local
+    //            process bind the same port and silently steal our traffic.
+    //            Microsoft's guidance is SO_EXCLUSIVEADDRUSE, so that is what we
+    //            ask for - we would rather fail loudly at bind() than be hijacked.
+    //
+    // If you are running two of these examples on one Windows host on purpose,
+    // give one of them a different --port rather than relaxing this.
+#if defined(_WIN32)
+    const int exclusive = 1;
+    setsockopt(m_socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+               (const char*)&exclusive, sizeof(exclusive));
+#else
     const int reuse = 1;
     setsockopt((int)m_socket, SOL_SOCKET, SO_REUSEADDR,
                (const char*)&reuse, sizeof(reuse));
+#endif
 
     // Allow sending to the broadcast address (needed for I-Am replies, etc.).
     const int broadcast = 1;

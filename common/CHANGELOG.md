@@ -1,0 +1,114 @@
+# Changelog — `common/` (the vendored shared helper)
+
+This is the changelog of the **`common/` folder itself**, separate from the
+example's own `CHANGELOG.md`. The folder is vendored (copied) into every
+example repository in the BACnet profile example series; this file plus the
+`COMMON_VERSION` constant in `CASExampleHelper.h` tell you whether a given
+example's copy is stale.
+
+**Rule:** any change to anything in `common/` bumps `COMMON_VERSION`, gets an
+entry here, and must then be re-copied into **every** example in the series.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.3.0] - 2026-07-16
+
+### Changed
+
+- **`ParsePortArg` / `ParseDeviceIdArg` now reject non-numeric input instead of
+  silently accepting it.** They used `atoi`/`atol`, which return `0` on garbage -
+  so `--deviceID abc` parsed as device **0** (a valid instance) and the operator
+  shipped a device answering at the wrong address with no diagnostic. Both now
+  validate the whole token with `strtol` + an end-pointer check (new
+  `ParseWholeNumber` helper) and print a `Warning:` naming the bad value and the
+  default they fell back to. Added `#include <errno.h>`.
+
+## [1.2.0] - 2026-07-15
+
+The **reconciliation release**: this is the first version that is genuinely
+byte-identical in every example, and the first that is enforced rather than
+asserted.
+
+### Fixed
+
+- **`PollKey()` no longer blocks the tick loop forever when stdin is not a tty.**
+  `EnableRawInput()` called `tcgetattr` first and **returned early on failure**,
+  before setting `O_NONBLOCK`. Under CI, `docker run -i` without `-t`, or a pipe
+  with no data, the next `read(STDIN_FILENO, ...)` blocked indefinitely —
+  `BACnetStack_Tick()` never ran again and **the device went deaf while still
+  looking alive**. `O_NONBLOCK` is now set unconditionally, before the tty check;
+  raw mode is still only applied to a real terminal. (`< /dev/null` masked this,
+  which is why it survived the smoke tests.)
+- **Windows now asks for `SO_EXCLUSIVEADDRUSE` instead of `SO_REUSEADDR`.** On
+  Windows `SO_REUSEADDR` lets *any* other local process bind the same port and
+  silently steal traffic — the exact failure the series runbook's gotcha 2 warns
+  about ("a stale instance can answer your requests and make a correct device look
+  broken"), shipped enabled in the file customers copy. POSIX keeps
+  `SO_REUSEADDR` (there it mainly means "rebind quickly after restart", which is
+  what makes multi-device testing work). The comment now states the hazard, not
+  just the convenience.
+
+### Added
+
+- **`HandleHelpAndVersionArgs()` — `--help` and `--version` now actually exist.**
+  The series conventions require every example to parse `--help`, `--version`,
+  `--deviceID` and `--port`, and every README documented all four, but the helper
+  only ever parsed `--port` and `--deviceID`: `--help` was the first thing a
+  newcomer typed and the app just booted. Also accepts `-h` and `/?`.
+- `CASBACnetStackExampleConstants.h` is now the **true series-wide union**, not
+  just B-SS's set: DeviceCommunicationControl (`DCC_*`,
+  `SERVICE_DEVICE_COMMUNICATION_CONTROL`, `ERROR_CODE_PASSWORD_FAILURE`),
+  alarm/event (`SERVICE_ACKNOWLEDGE_ALARM`, `*_EVENT_NOTIFICATION`,
+  `SERVICE_GET_EVENT_INFORMATION`, `NOTIFY_TYPE_*`,
+  `OBJECT_TYPE_NOTIFICATION_CLASS`, `OBJECT_TYPE_ANALOG_VALUE`),
+  ReinitializeDevice, time-sync, RPM/WPM, the A-side `*_SERVICE_TYPE` aliases and
+  `BACNET_DATATYPE_REAL`, and `ENGINEERING_UNITS_PERCENT`.
+
+### Notes
+
+- **The 1.1.0 entry below claimed this file was already the "series-wide
+  superset". That was false**, and the claim did real damage: B-SS's copy never
+  had the `DCC_*` constants that B-ASC had carried since its first commit, so the
+  runbook's own instruction to seed a new example's `common/` from B-SS **would
+  not compile** for any DCC-bearing profile. 1.2.0 is the first version for which
+  the claim is actually true.
+- Measured before this release: only **2 of 6** populated examples declared
+  `COMMON_VERSION` at all (B-SS, B-SA); B-ASC, B-AAC, B-OD and B-LD had neither it
+  nor this changelog — so the staleness mechanism did not lie, it **did not
+  exist** in those repos, and their `PrintVersion` could not print the helper
+  version line. Fixed by sweeping this folder to every example.
+- Going forward this is checked, not trusted: the parent repo's CI diffs every
+  `examples/*/common` against B-SS's and fails on any delta.
+
+## [1.1.0] - 2026-07-14
+
+### Added
+
+- `COMMON_VERSION` constant in `CASExampleHelper.h` and this changelog — the
+  folder now carries its own version so each example can tell whether its
+  vendored copy is stale. `PrintVersion` prints it alongside the app + stack
+  versions.
+- `CASBACnetStackExampleConstants.h` gained the output object types, the
+  commandable-property identifiers (`Priority_Array`, `Relinquish_Default`), and
+  the error codes introduced for B-SA. (This entry originally claimed the file was
+  the "series-wide superset" — see the 1.2.0 notes; it was not.)
+
+## [1.0.1] - 2026-06-16
+
+### Fixed
+
+- `GetPrimaryIPv4` (Windows): check the subnet-mask `inet_pton` return and
+  zero-initialize the `in_addr`, so a mask string that fails to parse can no
+  longer be read uninitialized (it falls back to the limited broadcast).
+  (Shipped in B-SS v1.0.2; the folder was unversioned at the time.)
+
+## [1.0.0] - 2026-06-16
+
+### Added
+
+- Initial vendored helper: `CASExampleHelper` (UDP transport + time callbacks,
+  version/help printing, `--port` / `--deviceID` parsing, keyboard commands
+  h/q/up/down, local-IPv4 + broadcast lookup, unsolicited I-Am on start-up),
+  `SimpleUDP` (cross-platform UDP socket wrapper), and
+  `CASBACnetStackExampleConstants.h`.

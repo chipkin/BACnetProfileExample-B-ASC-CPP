@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <time.h>
 
 #if defined(_WIN32)
@@ -199,23 +200,40 @@ bool GetPrimaryIPv4(uint8_t ip[4], uint8_t mask[4]) {
 #if !defined(_WIN32)
 // POSIX terminal raw-mode handling for non-blocking single-key reads.
 struct termios g_origTermios;
-bool g_rawActive = false;
+bool g_rawActive = false;      // true only if we put a REAL tty into raw mode
+bool g_stdinConfigured = false; // true once we have tried, tty or not
 
 void EnableRawInput() {
-    if (g_rawActive) {
+    if (g_stdinConfigured) {
         return;
     }
+    g_stdinConfigured = true;
+
+    // Set O_NONBLOCK FIRST, and UNCONDITIONALLY - before the tty check.
+    //
+    // This ordering is load-bearing. PollKey() read()s stdin on every tick of the
+    // main loop. If stdin is NOT a tty (CI, `docker run -i` without -t, a pipe
+    // with no data yet) and O_NONBLOCK was never set, that read() BLOCKS FOREVER:
+    // BACnetStack_Tick() never runs again and the device goes deaf while still
+    // looking perfectly alive. Redirecting `< /dev/null` hides it, because EOF
+    // returns 0 immediately - which is why it survives most smoke tests.
+    const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    if (flags != -1) {
+        fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
+
+    // Raw mode only means anything for a real terminal. Not having one is fine -
+    // we simply do not get single-key input, and the non-blocking read above
+    // keeps the tick loop healthy either way.
     if (tcgetattr(STDIN_FILENO, &g_origTermios) != 0) {
-        return; // not a tty (e.g. piped) - leave input alone
+        return; // not a tty (e.g. piped or no terminal) - leave termios alone
     }
     struct termios raw = g_origTermios;
     raw.c_lflag &= ~(unsigned)(ICANON | ECHO); // no line buffering, no echo
     raw.c_cc[VMIN] = 0;                          // non-blocking read
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-    const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    g_rawActive = true;
+    g_rawActive = true; // only now do we own the terminal state
 }
 #endif
 
@@ -228,6 +246,9 @@ void PrintVersion(const char* appName, const char* appVersion) {
     printf("CAS BACnet Stack version: %u.%u.%u.%u\n",
            BACnetStack_GetAPIMajorVersion(), BACnetStack_GetAPIMinorVersion(),
            BACnetStack_GetAPIPatchVersion(), BACnetStack_GetAPIBuildVersion());
+    // The vendored common/ helper has its own version (see common/CHANGELOG.md)
+    // so it is easy to tell whether this example's copy is stale.
+    printf("Common helper (common/) version: %s\n", COMMON_VERSION);
 }
 
 void PrintHelp(const char* appName, const char* appVersion) {
@@ -239,13 +260,64 @@ void PrintHelp(const char* appName, const char* appVersion) {
     printf("  down  - decrease Analog Input 1 by 1.1\n");
 }
 
+bool HandleHelpAndVersionArgs(const int argc, char** argv, const char* appName, const char* appVersion) {
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 ||
+            strcmp(argv[i], "/?") == 0) {
+            PrintVersion(appName, appVersion);
+            printf("\n");
+            printf("Usage: <executable> [options]\n");
+            printf("\n");
+            printf("Options:\n");
+            printf("  --help, -h        Show this help and exit.\n");
+            printf("  --version         Show version information and exit.\n");
+            printf("  --deviceID <n>    BACnet device instance (0..4194302). Each example in\n");
+            printf("                    this series has its own default so several can run on\n");
+            printf("                    one subnet at once.\n");
+            printf("  --port <n>        BACnet/IP UDP port (1..65535). Default 47808 (0xBAC0).\n");
+            printf("                    Use a non-default port to avoid clashing with another\n");
+            printf("                    BACnet device already on 47808 on this host.\n");
+            printf("\n");
+            PrintHelp(appName, appVersion);
+            return true;
+        }
+        if (strcmp(argv[i], "--version") == 0) {
+            PrintVersion(appName, appVersion);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Parse a whole-number argument value. Returns true only if the ENTIRE token is
+// a valid non-negative integer. This exists because atoi()/atol() silently
+// return 0 on garbage - so `--deviceID abc` would parse as device 0, a valid
+// instance, and the operator would ship a device answering at the wrong address
+// with no diagnostic. strtol + an end-pointer check is the difference between
+// "rejected your typo" and "silently obeyed a different command than you gave".
+static bool ParseWholeNumber(const char* text, long* out) {
+    if (text == NULL || *text == '\0') {
+        return false;
+    }
+    char* end = NULL;
+    errno = 0;
+    const long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value < 0) {
+        return false; // non-numeric, trailing junk, empty, negative, or overflow
+    }
+    *out = value;
+    return true;
+}
+
 uint16_t ParsePortArg(const int argc, char** argv, const uint16_t defaultPort) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (strcmp(argv[i], "--port") == 0) {
-            const int p = atoi(argv[i + 1]);
-            if (p > 0 && p <= 65535) {
+            long p = 0;
+            if (ParseWholeNumber(argv[i + 1], &p) && p > 0 && p <= 65535) {
                 return (uint16_t)p;
             }
+            printf("Warning: ignoring invalid --port \"%s\" (want 1..65535); using %u.\n",
+                   argv[i + 1], (unsigned)defaultPort);
         }
     }
     return defaultPort;
@@ -254,12 +326,14 @@ uint16_t ParsePortArg(const int argc, char** argv, const uint16_t defaultPort) {
 uint32_t ParseDeviceIdArg(const int argc, char** argv, const uint32_t defaultDeviceId) {
     for (int i = 1; i + 1 < argc; ++i) {
         if (strcmp(argv[i], "--deviceID") == 0) {
-            const long id = atol(argv[i + 1]);
             // 0 .. 4194302 is the valid BACnet device instance range (4194303 is
             // the "unconfigured" wildcard and is not a usable instance).
-            if (id >= 0 && id < 4194303) {
+            long id = 0;
+            if (ParseWholeNumber(argv[i + 1], &id) && id < 4194303) {
                 return (uint32_t)id;
             }
+            printf("Warning: ignoring invalid --deviceID \"%s\" (want 0..4194302); using %u.\n",
+                   argv[i + 1], (unsigned)defaultDeviceId);
         }
     }
     return defaultDeviceId;

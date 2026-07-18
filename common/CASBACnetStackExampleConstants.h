@@ -23,11 +23,13 @@ namespace CASBACnetStackExampleConstants {
 //    Full list: submodules/cas-bacnet-stack/source/BACnetObjectType.h
 static const uint16_t OBJECT_TYPE_ANALOG_INPUT = 0;
 static const uint16_t OBJECT_TYPE_ANALOG_OUTPUT = 1;
+static const uint16_t OBJECT_TYPE_ANALOG_VALUE = 2;
 static const uint16_t OBJECT_TYPE_BINARY_INPUT = 3;
 static const uint16_t OBJECT_TYPE_BINARY_OUTPUT = 4;
 static const uint16_t OBJECT_TYPE_DEVICE = 8;
 static const uint16_t OBJECT_TYPE_MULTI_STATE_INPUT = 13;
 static const uint16_t OBJECT_TYPE_MULTI_STATE_OUTPUT = 14;
+static const uint16_t OBJECT_TYPE_NOTIFICATION_CLASS = 15;
 static const uint16_t OBJECT_TYPE_NETWORK_PORT = 56;
 
 // -- BACnet property identifiers (Property_Identifier enumeration) ----------
@@ -65,6 +67,7 @@ static const uint32_t PROPERTY_IDENTIFIER_VENDOR_NAME = 121;
 // -- BACnet engineering units (Engineering_Units enumeration) ---------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetEngineeringUnits.h
 static const uint32_t ENGINEERING_UNITS_DEGREES_CELSIUS = 62;
+static const uint32_t ENGINEERING_UNITS_PERCENT = 98;
 
 // -- BACnet polarity (Polarity enumeration, for Binary objects) -------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetPolarity.h
@@ -77,22 +80,63 @@ static const uint32_t BACNET_IP_MODE_NORMAL = 0;
 // -- BACnet services (Services_Supported enumeration) -----------------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetServicesSupported.h
 //    Used with BACnetStack_SetServiceEnabled() to turn individual services on/off.
+//    Enable ONLY the services your profile requires - omitting the rest is the
+//    whole point of a profile example.
+static const uint32_t SERVICE_ACKNOWLEDGE_ALARM = 0;
+static const uint32_t SERVICE_CONFIRMED_EVENT_NOTIFICATION = 2;
 static const uint32_t SERVICE_READ_PROPERTY = 12;
+static const uint32_t SERVICE_READ_PROPERTY_MULTIPLE = 14;
 static const uint32_t SERVICE_WRITE_PROPERTY = 15;
+static const uint32_t SERVICE_WRITE_PROPERTY_MULTIPLE = 16;
 static const uint32_t SERVICE_DEVICE_COMMUNICATION_CONTROL = 17;
+static const uint32_t SERVICE_REINITIALIZE_DEVICE = 20;
+static const uint32_t SERVICE_I_AM = 26;
+static const uint32_t SERVICE_I_HAVE = 27;
+static const uint32_t SERVICE_UNCONFIRMED_EVENT_NOTIFICATION = 29;
+static const uint32_t SERVICE_TIME_SYNCHRONIZATION = 32;
+static const uint32_t SERVICE_WHO_HAS = 33;
+static const uint32_t SERVICE_WHO_IS = 34;
+static const uint32_t SERVICE_UTC_TIME_SYNCHRONIZATION = 36;
+static const uint32_t SERVICE_GET_EVENT_INFORMATION = 39;
 
-// -- BACnet error codes (Error_Code enumeration) ----------------------------
-//    Full list: submodules/cas-bacnet-stack/source/BACnetErrorCode.h
-//    A SetProperty* / service callback writes one of these to its errorCode
-//    out-parameter and returns false to reject the request with that Error-PDU.
-static const uint32_t ERROR_CODE_VALUE_OUT_OF_RANGE = 37;
-static const uint32_t ERROR_CODE_PASSWORD_FAILURE = 26;
+// -- Confirmed-service choice, for the A-side Send* calls -------------------
+//    Same numbers as the Services_Supported values above; kept under the names
+//    the client-side BACnetStack_Send* helpers use so a client example reads
+//    naturally. (READ_PROPERTY_SERVICE_TYPE == SERVICE_READ_PROPERTY == 12.)
+static const uint8_t READ_PROPERTY_SERVICE_TYPE = 12;          // ReadProperty
+static const uint8_t READ_PROPERTY_MULTIPLE_SERVICE_TYPE = 14; // ReadPropertyMultiple
+static const uint8_t WRITE_PROPERTY_SERVICE_TYPE = 15;         // WriteProperty
 
-// -- DeviceCommunicationControl enable-disable argument ----------------------
+// -- BACnet application datatype tags ---------------------------------------
+//    Full list: submodules/cas-bacnet-stack/source/BACnetStackDatatypes.h
+static const uint8_t BACNET_DATATYPE_REAL = 4;
+
+// -- DeviceCommunicationControl enable/disable (DM-DCC-B) -------------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetEnableDisable.h
+//    NOTE: at Protocol_Revision >= 20 the plain `disable` (1) is DEPRECATED -
+//    the stack answers it service-request-denied. Only `enable` (0) and
+//    `disable-initiation` (2) actually take effect.
 static const uint8_t DCC_ENABLE = 0;             // resume all communication
 static const uint8_t DCC_DISABLE = 1;            // stop initiating AND responding
 static const uint8_t DCC_DISABLE_INITIATION = 2; // keep responding, stop initiating
+
+// -- ReinitializeDevice states (DM-RD-B) ------------------------------------
+//    Full list: submodules/cas-bacnet-stack/source/BACnetReinitializedStateOfDevice.h
+static const uint32_t REINITIALIZE_STATE_COLDSTART = 0;
+static const uint32_t REINITIALIZE_STATE_WARMSTART = 1;
+
+// -- Notification type (for alarm/event objects) ----------------------------
+//    Full list: submodules/cas-bacnet-stack/source/BACnetNotifyType.h
+static const uint8_t NOTIFY_TYPE_ALARM = 0;
+static const uint8_t NOTIFY_TYPE_EVENT = 1;
+
+// -- BACnet error codes (Error_Code enumeration) ----------------------------
+//    Full list: submodules/cas-bacnet-stack/source/BACnetErrorCode.h
+//    A SetProperty* callback writes one of these to its errorCode out-parameter
+//    and returns false to reject a write with that BACnet Error-PDU.
+static const uint32_t ERROR_CODE_PASSWORD_FAILURE = 26;
+static const uint32_t ERROR_CODE_VALUE_OUT_OF_RANGE = 37;
+static const uint32_t ERROR_CODE_OPTIONAL_FUNCTIONALITY_NOT_SUPPORTED = 45;
 
 // -- Transport network type (BACnetPacket::NetworkType, for the send/receive
 //    callbacks and SendIAm).

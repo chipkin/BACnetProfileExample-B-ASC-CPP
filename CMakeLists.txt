@@ -7,7 +7,7 @@
 # build, copy, or ship first - everything compiles into one self-contained
 # executable.
 #
-# NOTE: the first build compiles the entire stack (~460 source files), so it
+# NOTE: the first build compiles the entire stack (~600 source files), so it
 # takes a few minutes. Subsequent incremental builds are fast.
 #
 # Build:
@@ -20,6 +20,19 @@
 
 cmake_minimum_required(VERSION 3.15)
 project(BACnetProfileExample_CPP_B_ASC CXX C)
+
+
+# Default to a Release build.
+#
+# Without this, a single-config generator (Unix Makefiles / Ninja - the default
+# on Linux and macOS) leaves CMAKE_BUILD_TYPE EMPTY, and the documented
+# `cmake --build build --config Release` is SILENTLY IGNORED there: --config
+# only means anything to a multi-config generator like Visual Studio. The result
+# is that the whole stack (~600 files) compiles at -O0 and the customer never
+# finds out. Windows is unaffected, which is exactly why this survived so long.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -71,7 +84,7 @@ target_include_directories(BACnetExampleBASC PRIVATE
 
 # --- Warnings on OUR sources only -------------------------------------------
 # Apply strict warnings to the example + helper sources, but NOT to the bundled
-# third-party stack (~460 files) which would be noisy and isn't ours to fix.
+# third-party stack (~600 files) which would be noisy and isn't ours to fix.
 if(MSVC)
     set(EXAMPLE_WARNINGS "/W4")
 else()

@@ -7,7 +7,14 @@
 name: build-and-release
 
 on:
+  # Guard, not just publish. Without a pull_request trigger this workflow only
+  # ever fired on a version tag - so a commit that broke main.cpp stayed green
+  # until someone cut a release, and then the RELEASE failed. That is the most
+  # expensive moment to find out. The build + smoke test below are the same
+  # either way; only the `release` job is gated on the tag - a PR builds and smoke-tests, it does not publish.
+  pull_request:
   push:
+    branches: [main]
     tags:
       - "v*.*.*"        # e.g. v1.0.0
   workflow_dispatch:     # also allow manual runs
@@ -54,7 +61,10 @@ jobs:
       - name: Smoke test (starts, binds, and stays up)
         shell: bash
         run: |
-          "${{ matrix.exe }}" --port 47808 > smoke.log 2>&1 &
+          # Non-default port: runbook 5.0 / gotcha 2 - 47808 may already be in use on
+          # the runner or by another BACnet device, which would make a healthy
+          # device look broken.
+          "${{ matrix.exe }}" --port 47821 > smoke.log 2>&1 &
           PID=$!
           sleep 3
           if kill -0 "$PID" 2>/dev/null; then

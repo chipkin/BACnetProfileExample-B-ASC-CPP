@@ -31,15 +31,15 @@ cmake -B build -S .
 cmake --build build --config Release
 ```
 
-The first build compiles the whole stack (~460 files) and takes a few minutes;
+The first build compiles the whole stack (~600 files) and takes a few minutes;
 later incremental builds are fast. Use `-D CAS_STACK_DIR=...` only if your stack
 lives outside the bundled submodule.
 
 ## Run
 
 ```bash
-./build/BACnetExampleBASC [--port 47808] [--deviceID 389001]   # Linux/macOS
-.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389001]   # Windows
+./build/BACnetExampleBASC [--port 47808] [--deviceID 389003]   # Linux/macOS
+.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389003]   # Windows
 ```
 
 Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1.
@@ -59,8 +59,10 @@ Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1
   Protocol_Revision >= 20 - only `enable` (0) and `disable-initiation` (2) apply.
 - Match the surrounding code style: `const`-correct parameters, check every stack
   return value, keep `main.cpp` linear and well-commented.
-- Do **not** edit `../common` from this repo - it is shared across all examples
-  and has a single source of truth.
+- **Never edit `common/` in this repo alone** - it is a vendored copy shared by
+  every example in the series, with its own version (`COMMON_VERSION`) and
+  changelog (`common/CHANGELOG.md`). To change it: edit, bump the version, add
+  a changelog entry, then re-copy `common/` into every example repository.
 
 ## How to verify a change
 
