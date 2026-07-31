@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
+  ahead of the previous pin (`92c91d74`); includes the removal of the 13
+  `RegisterHookProperty*` exports, the `DecodeAsXML`/`DecodeAsJSON` →
+  `DecodeAs` fold, the `SetCOVMultipleSettings` rename, the
+  `SetBackupAndRestoreEnabled` signature change (absorbs
+  `backupFailureTimeout`), and the removal of `SetObjectTypeSupported` — none
+  of which this example calls. Known cosmetic side effect: the newly merged
+  BACnet/SC datalink logs a one-time "UUID has not been set" error on the
+  debug callback at start-up in applications that never configure BACnet/SC;
+  it latches its error flag and goes quiet. Functionality is unaffected.
 - **Stack pin moved to the series `6.x` branch (CAS BACnet Stack 6.0.0.0).**
   Which stack version this example requires is a material licensing fact.
 - The commandable-setup loop carries `{type, instance}` pairs instead of a
