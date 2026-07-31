@@ -228,11 +228,10 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
 // WHAT false ACTUALLY DOES - the most important paragraph in this file, and the
 // opposite of what most people assume. Returning false does NOT reliably produce
 // a BACnet error. The stack only errors for the handful of properties it refuses
-// to invent (BACnetBusinessLogic.cpp: the valueShouldBeInitialized switch) -
-// Present_Value, Number_Of_States, Relinquish_Default, Local_Date, Local_Time,
-// and a Network Port's APDU_Length.
-// For EVERYTHING ELSE, a false return falls through to GetDefaultPropertyValue()
-// (BACnetDBDevice.cpp) and the stack SILENTLY SUBSTITUTES a default:
+// to invent: Present_Value, Number_Of_States, Relinquish_Default, Local_Date,
+// Local_Time, and a Network Port's APDU_Length.
+// For EVERYTHING ELSE, a false return means the stack SILENTLY SUBSTITUTES a
+// default:
 //     Object_Name -> the literal string "undefined"
 //     Units       -> no-units (95)
 //     otherwise   -> a datatype zero-value
@@ -353,11 +352,10 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
     }
     // Units is REQUIRED on an Analog Input AND on an Analog Output. Serve BOTH.
     // If you only serve the input's, the output does not error - it silently
-    // reports no-units(95), because Units is not in the stack's
-    // valueShouldBeInitialized list and so falls through to a substituted default
-    // (see the note at the top of this section). A setpoint that reads back "no
-    // units" next to a degC sensor is the kind of thing nobody notices until
-    // commissioning.
+    // reports no-units(95), because Units is one of the properties the stack
+    // substitutes a default for rather than erroring on (see the note at the top
+    // of this section). A setpoint that reads back "no units" next to a degC
+    // sensor is the kind of thing nobody notices until commissioning.
     if (propertyIdentifier == PROPERTY_IDENTIFIER_UNITS &&
         ((objectType == OBJECT_TYPE_ANALOG_INPUT && objectInstance == ANALOG_INPUT_INSTANCE) ||
          (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE))) {
@@ -924,9 +922,9 @@ int main(int argc, char** argv) {
     // Discovery: Who-Is/I-Am (DM-DDB-B) and Who-Has/I-Have (DM-DOB-B).
     //
     // These need enabling even though the device already ANSWERS them. The
-    // stack's service defaults are whoIs + whoHas + readProperty only
-    // (BACnetDBDevice.cpp) - iAm and iHave are left FALSE. Who-Is is answered and
-    // the start-up I-Am is sent regardless, because neither is gated on the bit;
+    // stack's service defaults are whoIs + whoHas + readProperty only - iAm and
+    // iHave are left FALSE. Who-Is is answered and the start-up I-Am is sent
+    // regardless, because neither is gated on the bit;
     // but Protocol_Services_Supported is emitted verbatim from that bitstring, so
     // without these calls the device DOES I-Am and I-Have while telling every
     // client it supports neither. The README claims DM-DDB-B and DM-DOB-B; this
@@ -998,8 +996,8 @@ int main(int argc, char** argv) {
     //
     // The Device's Description is optional too, and it is an easy one to get
     // wrong: serving it from a Get callback is NOT enough. The stack checks
-    // IsPropertyEnabled BEFORE it ever reaches the callbacks, and for an optional
-    // property that check falls back to "is it required?" - which is false. So a
+    // whether the property is enabled BEFORE it ever reaches the callbacks, and
+    // for an optional property that check answers "no" unless you enable it. So a
     // Description branch in the callback without this enable is DEAD CODE, and
     // the client reads back Error: unknown-property. Note that this fails
     // invisibly: the callback branch looks correct and simply never runs, so you
@@ -1023,25 +1021,19 @@ int main(int argc, char** argv) {
     // Relinquish_Default) wins.
     //
     // WORTH KNOWING BEFORE YOU COPY THIS: for ANALOG/BINARY/MULTI-STATE OUTPUT
-    // the three calls below are effectively NO-OPS. They reproduce the stack's
-    // own defaults. In the stack source:
-    //   - Present_Value on an Analog Output already defaults to required AND
-    //     writable (BACnetDBPropertyProfile.cpp: presentValue -> SetProperty(
-    //     true, true, Real)), and Priority_Array / Relinquish_Default default to
-    //     required - so AddObject already enabled all three; and
-    //   - IsPropertyCommandable() (BACnetBusinessLogic.cpp) returns true for
-    //     analogOutput / binaryOutput / multiStateOutput Present_Value
-    //     UNCONDITIONALLY - it consults no enable at all.
-    // Delete this loop and these objects still accept WriteProperty. Nothing
-    // here "flips the object into commandable mode"; the stack already did.
+    // the three calls below are effectively NO-OPS - they re-state defaults the
+    // stack already applies. On those types Present_Value is required and
+    // writable, Priority_Array and Relinquish_Default are required, and the stack
+    // treats Present_Value as commandable unconditionally. Delete this loop and
+    // these objects still accept WriteProperty.
     //
     // So why keep it? Because it states the commandable contract in one visible
     // place, and because it becomes LOAD-BEARING the moment you copy this pattern
     // to an optionally-commandable type - Analog Value, Binary Value, Multi-State
-    // Value. There Priority_Array / Relinquish_Default default to OPTIONAL (not
-    // enabled), and IsPropertyCommandable() explicitly requires BOTH to be
-    // enabled before it will treat the object as commandable. Omit these calls on
-    // an Analog Value and it silently is not commandable.
+    // Value. There Priority_Array and Relinquish_Default are OPTIONAL, and the
+    // stack requires BOTH to be enabled before it will treat the object as
+    // commandable. Omit these calls on an Analog Value and it silently is not
+    // commandable - it accepts the write and ignores it.
     //
     // Carry the INSTANCE alongside the type rather than assuming instance 1. On
     // these output types the distinction is benign (see above) - but it is fatal
