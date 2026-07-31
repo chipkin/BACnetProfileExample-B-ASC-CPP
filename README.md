@@ -287,6 +287,38 @@ cmake --build build --config Release
 If your CAS BACnet Stack lives somewhere other than the bundled submodule, point
 CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 
+### Link modes
+
+This example links the stack through the `CASBACnetStack::Adapter` CMake target
+(`submodules/cas-bacnet-stack/adapters/cpp`). `CAS_BACNET_STACK_LINK` picks how:
+
+```bash
+cmake -B build -S .                                   # SOURCE (default) - compiles the stack in
+cmake -B build -S . -D CAS_BACNET_STACK_LINK=STATIC    # link a prebuilt .lib/.a
+cmake -B build -S . -D CAS_BACNET_STACK_LINK=DLL       # load a prebuilt .dll/.so at runtime
+```
+
+Application code (`main.cpp`, `common/`) is identical in every mode - it calls
+`BACnetStack_AddDevice(...)` etc. by the exact export name, after one
+`LoadBACnetFunctions()` call at the top of `main()`. In `DLL` mode, the built
+executable needs `CASBACnetStack_x64_Release.dll` (Windows) or the equivalent
+`.so` next to it at runtime (built separately via
+`submodules/cas-bacnet-stack/projects/msvs/BuildCASBACnetStack.sln`,
+`ReleaseDll|x64` configuration on Windows); `LoadBACnetFunctions()` fails
+cleanly with a message from `CASBACnetStackAdapter_LastError()` if the DLL is
+missing or absent a required export - see Troubleshooting.
+
+> **`DLL` mode status:** verified end-to-end for the *failure* paths (DLL
+> absent; DLL present but missing a required export) — both fail cleanly with a
+> clear message, never a crash. The *success* path (a DLL exporting all 213
+> declared functions) was **not** achieved during verification: the stock
+> `ReleaseDll|x64` MSVS build is currently missing a few exports
+> (`BACnetStack_RegisterCallbackWriteGroupInhibitDelay`, `BACnetStack_SendWhoAmI`,
+> `BACnetStack_SendYouAre`) for reasons not yet root-caused — tracked as a
+> follow-up in the stack repo. `SOURCE` and `STATIC` mode are unaffected (they
+> link the real functions directly, not by runtime symbol lookup) and are fully
+> verified.
+
 ## Run
 
 ```bash

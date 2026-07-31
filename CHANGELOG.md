@@ -35,6 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Links the CAS BACnet Stack through the `CASBACnetStack::Adapter` CMake
+  target instead of hand-globbing the stack's `source/*.cpp`.** `main.cpp` and
+  `common/CASExampleHelper.cpp` now include `CASBACnetStackAdapter.h` and call
+  `LoadBACnetFunctions()` once at the top of `main()`; every `BACnetStack_*`
+  call site is otherwise unchanged. `CAS_BACNET_STACK_LINK` (`SOURCE` default,
+  or `STATIC`/`DLL`) picks the link mode — see the README's new "Link modes"
+  section. `SOURCE` and `STATIC` mode are fully verified; `DLL` mode's failure
+  paths are verified (absent DLL, DLL missing a required export — both fail
+  cleanly via `CASBACnetStackAdapter_LastError()`, never a crash) but its
+  success path could not be demonstrated during verification because the
+  current `ReleaseDll|x64` MSVS build of the stack is missing a few exports for
+  reasons not yet root-caused — tracked upstream. **TEMPORARY:** the stack
+  submodule pin currently points at the `adapter-cpp-package` branch tip
+  (stacked on `adapter-cpp-generate`), not `6.x-TestTool` — see cas-bacnet-stack
+  PRs #267 and #268; re-pin once both merge.
+  common/ bumped to v1.5.0 (see `common/CHANGELOG.md`) — this is a contract
+  change every example in the series needs when it re-syncs.
 - **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
   ahead of the previous pin (`92c91d74`); includes the removal of the 13
   `RegisterHookProperty*` exports, the `DecodeAsXML`/`DecodeAsJSON` →
