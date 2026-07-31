@@ -345,6 +345,21 @@ only the CMake flag, never a line of your code. The one requirement all three sh
 `DLL` mode that is the step that binds the symbols, and it also runs a version handshake in
 every mode.
 
+**Extra step for `STATIC` mode:** build the static library first — this mode links a prebuilt
+`.lib`/`.a`, it does not compile the stack.
+
+```bash
+# Windows: build CASBACnetStack_x64_Release.lib (ReleaseLib|x64) into <stack>/bin/
+msbuild submodules/cas-bacnet-stack/projects/msvs/CASBACnetStack/CASBACnetStack.vcxproj \
+        /p:Configuration=ReleaseLib /p:Platform=x64
+```
+
+CMake then finds it automatically in the stack's `bin/`; point elsewhere with
+`-D CAS_BACNET_STACK_LIB=/path/to/lib`. If no library is there, configuration stops with
+that `msbuild` line in the error rather than failing later at link. On MSVC the adapter also
+forces the static CRT (`/MT`) to match how the library is built — mixing runtimes otherwise
+produces hundreds of `LNK2038` errors that look like a corrupt library.
+
 **Extra step for `DLL` mode:** build the library and put it where the executable can find it.
 
 ```bash
@@ -361,9 +376,11 @@ CASBACnetStack_x64_Release.dll` when the file is absent, or `missing export:
 BACnetStack_<name>` when the library is the wrong build. The program exits with a message
 rather than crashing.
 
-> **Verified:** all three modes were built and run against a live BACnet client for this
-> release. `DLL` mode was additionally checked for both failure paths (library absent;
-> library present but missing an export) — each reports a readable error and exits cleanly.
+> **Verified:** all three modes were built **and run** for this release — `SOURCE`,
+> `STATIC` (confirmed with no DLL beside the executable, which is the point of static
+> linking), and `DLL`. `DLL` mode was additionally checked for both failure paths (library
+> absent; library present but missing an export) — each reports a readable error and exits
+> cleanly.
 >
 > Note the default library name is looked up on the OS search path and **relative to the
 > current working directory**, not to the executable's directory — so launching from a
