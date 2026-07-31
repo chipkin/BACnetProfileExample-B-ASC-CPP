@@ -30,6 +30,14 @@ example repository.
 ## How `main.cpp` uses it
 
 ```cpp
+// FIRST, before any other BACnetStack_* call - including anything in this helper, since
+// PrintVersion() asks the stack for its version. Mandatory in every link mode.
+if (!LoadBACnetFunctions()) {
+    fprintf(stderr, "Error: failed to load the CAS BACnet Stack: %s\n",
+            CASBACnetStackAdapter_LastError());
+    return 1;
+}
+
 const uint16_t port = CASExampleHelper::ParsePortArg(argc, argv, 47808);
 g_deviceInstance    = CASExampleHelper::ParseDeviceIdArg(argc, argv, g_deviceInstance);
 CASExampleHelper::PrintVersion(APP_NAME, APP_VERSION);  // app + stack version
@@ -45,6 +53,13 @@ while (running) {
 CASExampleHelper::RestoreInput();
 ```
 
-The CAS BACnet Stack (a git submodule of this repository) is compiled from
-source, so its C API (`CASBACnetStackDLL.h`) is called directly as
-`BACnetStack_*` — there is no DLL to load at runtime.
+The CAS BACnet Stack (a git submodule of this repository) is reached through the C++
+adapter (`adapters/cpp/CASBACnetStackAdapter.h`), so its C API is called directly as
+`BACnetStack_*` — the same call whether the stack is compiled from source, linked as a
+static library, or loaded from a DLL/.so at runtime. Which of those happens is a build-time
+choice (`CAS_BACNET_STACK_LINK`); the code above does not change.
+
+**That is why `LoadBACnetFunctions()` is not optional.** In DLL mode it is the call that
+binds the symbols, so skipping it leaves every `BACnetStack_*` name a null pointer; in the
+other modes it still runs the stack-version handshake. Call it once, at the top of `main()`,
+from a single thread. See `common/CHANGELOG.md` 1.5.0.

@@ -316,6 +316,13 @@ cmake --build build --config Release
 
 > **First build takes a few minutes** - it compiles the entire CAS BACnet Stack
 > (~600 source files) once. Incremental rebuilds after that are fast.
+>
+> Build in parallel to cut that down substantially - this is worth doing on the first
+> build of the day, and essential if you are running a class through it:
+>
+> ```bash
+> cmake --build build --config Release --parallel
+> ```
 
 If your CAS BACnet Stack lives somewhere other than the bundled submodule, point
 CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
@@ -379,12 +386,17 @@ Expected output:
 ```
 BACnet B-ASC (Application Specific Controller) Example - C++ v1.1.0
 CAS BACnet Stack version: 6.0.0.0
-Common helper (common/) version: 1.5.0
+Common helper (common/) version: 1.5.1
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
-... (one or more red "Error:" lines here - expected and benign; see Troubleshooting) ...
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
+RX 21 bytes from 192.168.3.76:47808
+... (one or more red "Error:" lines - expected and benign; see Troubleshooting) ...
 ```
+
+The `RX`/`Error:` lines depend on what else is on your network, so they may appear
+earlier, later, or (on a quiet subnet) only as a single line. The device is ready as
+soon as the `Device ... ready` line prints.
 
 Those first three lines are worth reading: they tell you the **example** version,
 the **stack** version you actually linked, and the version of the vendored
@@ -460,7 +472,9 @@ Then:
 | Symptom | Cause / fix |
 |---------|-------------|
 | On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC (BACnet Secure Connect, the TLS/WebSocket-based transport added in ASHRAE 135-2020) datalink that these BACnet/IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line (just the UUID one); on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
-| CMake error: *"CAS BACnet Stack source not found"* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
+| CMake error: *"CAS BACnet Stack adapter not found under: ..."* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
+| CMake error: *"CAS_BACNET_STACK_LINK=STATIC needs a prebuilt CAS BACnet Stack library"* | `STATIC` links a library you build separately; it does not compile the stack. Either build it (the message gives the exact `msbuild` line) and re-run CMake, or use the default `SOURCE` mode, which needs no prebuilt library. |
+| The device starts and prints `TX ... (broadcast)`, but no client ever sees it | Check the IP in that `TX` line against the subnet your BACnet client is on. The example picks the **first non-loopback adapter** the OS reports, which on a laptop with Hyper-V, WSL, VirtualBox or a VPN is frequently not your Wi-Fi/Ethernet. There is no `--interface` option yet; disable the unwanted virtual adapters, or run on a machine without them. (Also check the firewall row above.) |
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |
 | First build seems stuck for minutes | Normal - it's compiling ~600 stack files. Only the first build is slow. |
@@ -469,7 +483,7 @@ Then:
 | DeviceCommunicationControl `disable` returns an error | Expected. The plain `disable` value is deprecated at Protocol_Revision >= 20; use `disable-initiation` instead. |
 | WriteProperty to an output is rejected | Write to the **output** objects, not the inputs (inputs are read-only sensors), and keep the value in range. |
 | Client sends Who-Is but sees no I-Am | Firewall is blocking UDP 47808, or the client and device are on different subnets. Allow the port; test on the same subnet first. |
-| Replies show an unexpected device instance or vendor | Another BACnet device is already running on this host/port (the socket uses `SO_REUSEADDR`). Stop the other device, or run this example on its own machine/IP. |
+| Replies show an unexpected device instance or vendor | Another BACnet device is already answering on this host/port. On Linux/macOS two processes can share the port and both reply; on Windows the example asks for `SO_EXCLUSIVEADDRUSE` (`common/SimpleUDP.cpp`) so this shows up as a bind failure instead. Stop the other device, or use `--port`. |
 
 ## Extending the example
 

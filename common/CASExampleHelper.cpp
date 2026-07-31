@@ -311,13 +311,19 @@ void PrintVersion(const char* appName, const char* appVersion) {
     printf("Common helper (common/) version: %s\n", COMMON_VERSION);
 }
 
-void PrintHelp(const char* appName, const char* appVersion) {
-    PrintVersion(appName, appVersion);
+// Just the interactive key list, with no version banner - so the two callers that already
+// printed one (PrintHelp for the 'h' key, and the --help handler) do not print it twice.
+static void PrintInteractiveCommands() {
     printf("Commands:\n");
     printf("  h     - show this help (version + commands)\n");
     printf("  q     - quit\n");
     printf("  up    - increase Analog Input 1 by 1.1\n");
     printf("  down  - decrease Analog Input 1 by 1.1\n");
+}
+
+void PrintHelp(const char* appName, const char* appVersion) {
+    PrintVersion(appName, appVersion);
+    PrintInteractiveCommands();
 }
 
 bool HandleHelpAndVersionArgs(const int argc, char** argv, const char* appName, const char* appVersion) {
@@ -338,7 +344,7 @@ bool HandleHelpAndVersionArgs(const int argc, char** argv, const char* appName, 
             printf("                    Use a non-default port to avoid clashing with another\n");
             printf("                    BACnet device already on 47808 on this host.\n");
             printf("\n");
-            PrintHelp(appName, appVersion);
+            PrintInteractiveCommands(); // version banner already printed above
             return true;
         }
         if (strcmp(argv[i], "--version") == 0) {
