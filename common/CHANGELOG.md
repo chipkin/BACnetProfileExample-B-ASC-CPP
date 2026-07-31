@@ -12,6 +12,23 @@ entry here, and must then be re-copied into **every** example in the series.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-31
+
+### Changed
+
+- **`CASExampleHelper.cpp` now includes `CASBACnetStackAdapter.h` instead of
+  `CASBACnetStackDLL.h`.** No functional change to `common/`'s own code — it still
+  calls `BACnetStack_*` directly, same as before. This is a **contract change for
+  every consuming example's `main()`**: it must call `LoadBACnetFunctions()` once,
+  before any `BACnetStack_*` call (including before `CASExampleHelper::PrintVersion`
+  / `HandleHelpAndVersionArgs`, which call `BACnetStack_GetAPIMajorVersion()` etc.),
+  in every link mode. In source/static-lib mode this was previously a no-op (the
+  functions are always callable — "linked directly, there is no load step," per the
+  old header comment); the adapter's DLL mode makes that no longer universally true,
+  so the load step is now mandatory everywhere for one call to work in all three
+  modes. B-ASC is the first example adopted onto this; the other 7 need the same
+  `LoadBACnetFunctions()` call added to their `main()` when they re-sync to 1.5.0.
+
 ## [1.4.0] - 2026-07-18
 
 ### Added

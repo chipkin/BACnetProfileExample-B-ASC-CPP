@@ -9,9 +9,10 @@
 #include "SimpleUDP.h"
 #include "CASBACnetStackExampleConstants.h"
 
-// The CAS BACnet Stack C API. The whole stack is compiled into this program
-// from source, so we call BACnetStack_* functions directly.
-#include "CASBACnetStackDLL.h"
+// The CAS BACnet Stack C API, via the adapter: BACnetStack_* is called directly here,
+// the same call in every link mode (source/static/DLL) - see CASBACnetStackAdapter.h.
+// The caller's main() must have already called LoadBACnetFunctions() successfully.
+#include "CASBACnetStackAdapter.h"
 
 #include <stdio.h>
 #include <string.h>

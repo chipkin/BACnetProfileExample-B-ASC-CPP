@@ -59,7 +59,9 @@
 
 #include "CASExampleHelper.h"
 #include "CASBACnetStackExampleConstants.h"
-#include "CASBACnetStackDLL.h" // the CAS BACnet Stack C API (BACnetStack_*)
+#include "CASBACnetStackAdapter.h" // the CAS BACnet Stack C API (BACnetStack_*); call
+                                    // LoadBACnetFunctions() before any BACnetStack_* call -
+                                    // see the top of main() below.
 
 #include <stdio.h>
 #include <string.h>
@@ -842,9 +844,20 @@ int main(int argc, char** argv) {
     // Show printf output immediately, even when stdout is piped to a file.
     setvbuf(stdout, NULL, _IONBF, 0);
 
+    // --- Load the CAS BACnet Stack -------------------------------------------
+    // Required in every link mode (source/static/DLL) before any other
+    // BACnetStack_* call - see CASBACnetStackAdapter.h. In DLL mode this is the
+    // step that actually resolves the symbols; skipping it there is a null-pointer
+    // call, not a silent no-op, so it comes before even --version (which calls
+    // BACnetStack_GetAPIMajorVersion() to print the linked stack's version).
+    if (!LoadBACnetFunctions()) {
+        fprintf(stderr, "Error: failed to load the CAS BACnet Stack: %s\n",
+                CASBACnetStackAdapter_LastError());
+        return 1;
+    }
+
     // --- Command line + version --------------------------------------------
-    // --help / --version print and exit, so handle them before we bind a socket
-    // or touch the stack.
+    // --help / --version print and exit, so handle them before we bind a socket.
     if (CASExampleHelper::HandleHelpAndVersionArgs(argc, argv, APP_NAME, APP_VERSION)) {
         return 0;
     }

@@ -25,8 +25,10 @@
 // To change it: edit it, bump COMMON_VERSION, record the change in
 // common/CHANGELOG.md, then re-copy common/ into EVERY example in the series.
 //
-// The CAS BACnet Stack itself is compiled into the program from source, so its
-// C API (CASBACnetStackDLL.h) is linked directly - there is no "load" step.
+// The CAS BACnet Stack is linked via the C++ adapter (CASBACnetStackAdapter.h) -
+// BACnetStack_* is called directly, the same call whether the stack is compiled from
+// source, linked as a static lib, or loaded from a DLL/.so. The example's main() must
+// call LoadBACnetFunctions() once, before any BACnetStack_* call, in every mode.
 // =============================================================================
 
 #include <stdint.h>
@@ -38,7 +40,7 @@ namespace CASExampleHelper {
 // version). Bump it whenever anything in common/ changes, and record the
 // change in common/CHANGELOG.md - every example in the series must then be
 // re-synced to the same common/ version.
-static const char* COMMON_VERSION = "1.4.0";
+static const char* COMMON_VERSION = "1.5.0";
 
 // Print the example's name + version, the linked CAS BACnet Stack version,
 // and the common/ helper version.
