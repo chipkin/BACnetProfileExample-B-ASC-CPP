@@ -41,17 +41,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LoadBACnetFunctions()` once at the top of `main()`; every `BACnetStack_*`
   call site is otherwise unchanged. `CAS_BACNET_STACK_LINK` (`SOURCE` default,
   or `STATIC`/`DLL`) picks the link mode — see the README's new "Link modes"
-  section. `SOURCE` and `STATIC` mode are fully verified; `DLL` mode's failure
-  paths are verified (absent DLL, DLL missing a required export — both fail
-  cleanly via `CASBACnetStackAdapter_LastError()`, never a crash) but its
-  success path could not be demonstrated during verification because the
-  current `ReleaseDll|x64` MSVS build of the stack is missing a few exports for
-  reasons not yet root-caused — tracked upstream. **TEMPORARY:** the stack
-  submodule pin currently points at the `adapter-cpp-package` branch tip
-  (stacked on `adapter-cpp-generate`), not `6.x-TestTool` — see cas-bacnet-stack
-  PRs #267 and #268; re-pin once both merge.
+  section. **All three modes are verified**: `SOURCE` and `STATIC` build and run
+  against a live client, and `DLL` mode now loads the stack, binds all 213
+  exports, passes the version handshake and runs — plus both of its failure
+  paths (library absent; library present but missing an export) report a
+  readable error and exit cleanly rather than crashing.
+  **TEMPORARY:** the stack submodule pin currently points at the
+  `adapter-cpp-package` branch tip (stacked on `adapter-cpp-generate`), not
+  `6.x-TestTool` — see cas-bacnet-stack PRs #267 and #268; re-pin once both merge.
   common/ bumped to v1.5.0 (see `common/CHANGELOG.md`) — this is a contract
   change every example in the series needs when it re-syncs.
+- **Documentation corrections from a five-persona review** (lead developer,
+  educator, junior developer, BACnet newcomer, staff architect): the version
+  banner and sample output now match the shipped `common/` version (they claimed
+  v1.3.0 against a v1.5.0 tree — in a project whose own docs teach "the printed
+  versions are how you detect drift"); the BIBB `-A`/`-B` suffix convention,
+  `Protocol_Revision`, BACnet/SC and "BACnet internetwork" are now defined at
+  first use; the Verify section names free clients (YABE, Wireshark) alongside
+  the commercial one; and two new sections cover what in `common/` is demo-only
+  versus production-worthy, and the `BACnetStack_Tick()` cadence and
+  single-threading contract.
 - **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
   ahead of the previous pin (`92c91d74`); includes the removal of the 13
   `RegisterHookProperty*` exports, the `DecodeAsXML`/`DecodeAsJSON` →
