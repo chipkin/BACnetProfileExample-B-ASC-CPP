@@ -52,8 +52,30 @@ jobs:
           # default token (which only works if the stack is made accessible).
           token: ${{ secrets.CAS_STACK_PAT || github.token }}
 
-      - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+      # Published binaries are built with CAS_BACNET_STACK_LINK=SOURCE - the stack is
+      # compiled from source straight into the executable. Stated EXPLICITLY rather than
+      # relying on it being the CMake default, because what we publish must not change if
+      # that default ever moves.
+      #
+      # Why SOURCE for a release: the artifact is a single self-contained executable. STATIC
+      # would need a prebuilt library built and matched here first, and DLL would require
+      # shipping CASBACnetStack_x64_Release.dll alongside the exe and would fail at start-up
+      # for anyone who downloaded only the binary. Those two modes are for integrators
+      # choosing them deliberately in their own build, not for a downloadable demo.
+      - name: Configure (SOURCE link mode - self-contained binary)
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCAS_BACNET_STACK_LINK=SOURCE
+
+      - name: Confirm the link mode CMake actually used
+        shell: bash
+        run: |
+          # Fail loudly if the cache does not say SOURCE - a published binary that silently
+          # needs a DLL beside it is the failure we are guarding against.
+          # Anchor on the colon: without it this also matches the
+          # CAS_BACNET_STACK_LINK-STRINGS:INTERNAL=SOURCE;STATIC;DLL helper entry and the
+          # comparison below never matches.
+          mode=$(grep -E '^CAS_BACNET_STACK_LINK:' build/CMakeCache.txt | cut -d= -f2)
+          echo "CAS_BACNET_STACK_LINK=$mode"
+          [ "$mode" = "SOURCE" ] || { echo "FAIL: expected SOURCE, got '$mode'"; exit 1; }
 
       - name: Build
         run: cmake --build build --config Release

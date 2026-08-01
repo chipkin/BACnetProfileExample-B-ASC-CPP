@@ -10,12 +10,22 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 Part of the CAS BACnet Stack **BACnet profile example series** - one repository
 per BACnet device profile. This example claims **only** B-ASC.
 
-Reading order: [B-SS (Smart Sensor)](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP) is the **first** example and the one to
-start with, then [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP); this is the **third**.
+Reading order: this repository stands on its own — **you can start here.** If you also want the
+gentler introductions to the shared sensor/actuator objects, [B-SS (Smart
+Sensor)](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP) is the first example in the
+series and [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP) the
+second; this is the third and repeats everything it needs.
 
 > **Versions:** this document describes **example v1.1.0**, built and verified
-> against **CAS BACnet Stack 6.0.0.0** at **Protocol_Revision 24**, with the
-> vendored `common/` helper at **v1.3.0**. Running the example prints all three.
+> against **CAS BACnet Stack 6.x** at **Protocol_Revision 24**, with the
+> vendored `common/` helper at **v1.5.1**. Running the example prints all three —
+> if what it prints disagrees with this line, trust the program and check
+> `CHANGELOG.md`.
+>
+> **Protocol_Revision** is the revision of the ASHRAE 135 standard a device claims to conform
+> to. It is a number every BACnet device advertises, and it changes real behaviour: at revision
+> 20 and above, for example, the deprecated plain `disable` form of
+> DeviceCommunicationControl must be rejected (see that section below).
 
 ## Quickstart
 
@@ -56,8 +66,22 @@ certify devices against it. (New to BACnet in general? See Chipkin's
 [What is BACnet?](https://docs.chipkin.com/protocols/bacnet/) guide.)
 
 **B-ASC (BACnet Application Specific Controller)** is a controller with limited
-resources, intended for a specific application. Compared to a Smart Actuator, it
+resources, intended for a specific application - think a thermostat, a VAV box
+controller, or a fan-coil controller: it does one job, and it does not have the
+memory or CPU of a supervisory panel. Compared to a Smart Actuator, it
 adds the requirement to respond to communication-control messages.
+
+**Reading the capability names.** Each capability below is a **BIBB** (BACnet
+Interoperability Building Block) - the standard's unit of "this device can do this one
+thing." Every BIBB name ends in **-A** or **-B**:
+
+- **-A** = the **A side**, the device that *initiates* the request (a client - an operator
+  workstation, a supervisory controller).
+- **-B** = the **B side**, the device that *responds* to it (a server - this example).
+
+So `DS-RP-B` reads as "Data Sharing, ReadProperty, B side": *answers* ReadProperty requests.
+A device profile is essentially a required list of BIBBs. This example implements only B-side
+BIBBs, because a B-ASC is a device that gets asked, not one that asks.
 
 **What the profile requires:**
 
@@ -197,6 +221,15 @@ as a Chipkin demo. None of it is cosmetic.
 > uniqueness problem the code comments warn about. In a real product,
 > `Object_Name` must be per-unit configurable too (serial number, DIP switches,
 > a config file, or a `--deviceName` argument).
+>
+> "Unique across the **BACnet internetwork**" means unique across *every* BACnet network
+> reachable from this one — all the IP subnets and MS/TP segments joined by BACnet routers,
+> which at a typical site means the whole building or campus, not just your local subnet. Two
+> devices with the same name on opposite sides of a router still collide.
+>
+> Running several of these examples on one desk (or a classroom of students on one subnet)
+> hits this immediately: pass a different `--deviceID` to each, and expect the duplicate
+> `Object_Name` until you make it configurable.
 
 `main.cpp` marks this block with a `CHANGE ALL OF THIS BEFORE YOU SHIP` banner.
 
@@ -283,9 +316,77 @@ cmake --build build --config Release
 
 > **First build takes a few minutes** - it compiles the entire CAS BACnet Stack
 > (~600 source files) once. Incremental rebuilds after that are fast.
+>
+> Build in parallel to cut that down substantially - this is worth doing on the first
+> build of the day, and essential if you are running a class through it:
+>
+> ```bash
+> cmake --build build --config Release --parallel
+> ```
 
 If your CAS BACnet Stack lives somewhere other than the bundled submodule, point
 CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
+
+### Link modes
+
+This example links the stack through the `CASBACnetStack::Adapter` CMake target
+(`submodules/cas-bacnet-stack/adapters/cpp`). `CAS_BACNET_STACK_LINK` picks how:
+
+```bash
+cmake -B build -S .                                   # SOURCE (default) - compiles the stack in
+cmake -B build -S . -D CAS_BACNET_STACK_LINK=STATIC    # link a prebuilt .lib/.a
+cmake -B build -S . -D CAS_BACNET_STACK_LINK=DLL       # load a prebuilt .dll/.so at runtime
+```
+
+**Application code is identical in every mode.** `main.cpp` and `common/` call
+`BACnetStack_AddDevice(...)` and friends by the exact export name; switching modes changes
+only the CMake flag, never a line of your code. The one requirement all three share is calling
+`LoadBACnetFunctions()` once at the top of `main()` before any other `BACnetStack_*` call — in
+`DLL` mode that is the step that binds the symbols, and it also runs a version handshake in
+every mode.
+
+**Extra step for `STATIC` mode:** build the static library first — this mode links a prebuilt
+`.lib`/`.a`, it does not compile the stack.
+
+```bash
+# Windows: build CASBACnetStack_x64_Release.lib (ReleaseLib|x64) into <stack>/bin/
+msbuild submodules/cas-bacnet-stack/projects/msvs/CASBACnetStack/CASBACnetStack.vcxproj \
+        /p:Configuration=ReleaseLib /p:Platform=x64
+```
+
+CMake then finds it automatically in the stack's `bin/`; point elsewhere with
+`-D CAS_BACNET_STACK_LIB=/path/to/lib`. If no library is there, configuration stops with
+that `msbuild` line in the error rather than failing later at link. On MSVC the adapter also
+forces the static CRT (`/MT`) to match how the library is built — mixing runtimes otherwise
+produces hundreds of `LNK2038` errors that look like a corrupt library.
+
+**Extra step for `DLL` mode:** build the library and put it where the executable can find it.
+
+```bash
+# Windows: build CASBACnetStack_x64_Release.dll (ReleaseDll|x64)
+msbuild submodules/cas-bacnet-stack/projects/msvs/CASBACnetStack/CASBACnetStack.vcxproj \
+        /p:Configuration=ReleaseDll /p:Platform=x64
+# then copy submodules/cas-bacnet-stack/bin/CASBACnetStack_x64_Release.dll
+# next to build-dll/Release/BACnetExampleBASC.exe
+```
+
+If it cannot be loaded, `LoadBACnetFunctions()` returns false and
+`CASBACnetStackAdapter_LastError()` says why — `could not load
+CASBACnetStack_x64_Release.dll` when the file is absent, or `missing export:
+BACnetStack_<name>` when the library is the wrong build. The program exits with a message
+rather than crashing.
+
+> **Verified:** all three modes were built **and run** for this release — `SOURCE`,
+> `STATIC` (confirmed with no DLL beside the executable, which is the point of static
+> linking), and `DLL`. `DLL` mode was additionally checked for both failure paths (library
+> absent; library present but missing an export) — each reports a readable error and exits
+> cleanly.
+>
+> Note the default library name is looked up on the OS search path and **relative to the
+> current working directory**, not to the executable's directory — so launching from a
+> different working directory will not find a DLL that merely sits beside the .exe. Define
+> `BACNET_LIB_FILE` to an absolute path if that matters to your deployment (see
+> `adapters/cpp/CASBACnetStackAdapter.h`).
 
 ## Run
 
@@ -302,12 +403,17 @@ Expected output:
 ```
 BACnet B-ASC (Application Specific Controller) Example - C++ v1.1.0
 CAS BACnet Stack version: 6.0.0.0
-Common helper (common/) version: 1.3.0
+Common helper (common/) version: 1.5.1
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
-... (one or more red "Error:" lines here - expected and benign; see Troubleshooting) ...
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
+RX 21 bytes from 192.168.3.76:47808
+... (one or more red "Error:" lines - expected and benign; see Troubleshooting) ...
 ```
+
+The `RX`/`Error:` lines depend on what else is on your network, so they may appear
+earlier, later, or (on a quiet subnet) only as a single line. The device is ready as
+soon as the `Device ... ready` line prints.
 
 Those first three lines are worth reading: they tell you the **example** version,
 the **stack** version you actually linked, and the version of the vendored
@@ -348,8 +454,17 @@ the series):
 
 ## Verify
 
-Use a BACnet client such as the
-[**CAS BACnet Explorer**](https://store.chipkin.com/products/tools/cas-bacnet-explorer):
+You need a BACnet client to talk to the device. Any of these work:
+
+- [**CAS BACnet Explorer**](https://store.chipkin.com/products/tools/cas-bacnet-explorer) -
+  Chipkin's commercial client (free trial), used for the steps below.
+- [**YABE**](https://sourceforge.net/projects/yetanotherbacnetexplorer/) ("Yet Another BACnet
+  Explorer") - free and open source; enough to discover, browse, read, and write.
+- [**Wireshark**](https://www.wireshark.org/) with the `bvlc` display filter - free; shows you
+  the actual packets rather than an object tree, which is the better choice when you want to
+  understand the protocol or prove what went on the wire.
+
+Then:
 
 1. **Discover** - send a **Who-Is**. The device replies with **I-Am** from
    instance **389003** (vendor **389**). It also broadcasts an I-Am at start-up.
@@ -373,8 +488,10 @@ Use a BACnet client such as the
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC datalink these IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line (just the UUID one); on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
-| CMake error: *"CAS BACnet Stack source not found"* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
+| On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC (BACnet Secure Connect, the TLS/WebSocket-based transport added in ASHRAE 135-2020) datalink that these BACnet/IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line (just the UUID one); on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
+| CMake error: *"CAS BACnet Stack adapter not found under: ..."* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
+| CMake error: *"CAS_BACNET_STACK_LINK=STATIC needs a prebuilt CAS BACnet Stack library"* | `STATIC` links a library you build separately; it does not compile the stack. Either build it (the message gives the exact `msbuild` line) and re-run CMake, or use the default `SOURCE` mode, which needs no prebuilt library. |
+| The device starts and prints `TX ... (broadcast)`, but no client ever sees it | Check the IP in that `TX` line against the subnet your BACnet client is on. The example picks the **first non-loopback adapter** the OS reports, which on a laptop with Hyper-V, WSL, VirtualBox or a VPN is frequently not your Wi-Fi/Ethernet. There is no `--interface` option yet; disable the unwanted virtual adapters, or run on a machine without them. (Also check the firewall row above.) |
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |
 | First build seems stuck for minutes | Normal - it's compiling ~600 stack files. Only the first build is slow. |
@@ -383,7 +500,7 @@ Use a BACnet client such as the
 | DeviceCommunicationControl `disable` returns an error | Expected. The plain `disable` value is deprecated at Protocol_Revision >= 20; use `disable-initiation` instead. |
 | WriteProperty to an output is rejected | Write to the **output** objects, not the inputs (inputs are read-only sensors), and keep the value in range. |
 | Client sends Who-Is but sees no I-Am | Firewall is blocking UDP 47808, or the client and device are on different subnets. Allow the port; test on the same subnet first. |
-| Replies show an unexpected device instance or vendor | Another BACnet device is already running on this host/port (the socket uses `SO_REUSEADDR`). Stop the other device, or run this example on its own machine/IP. |
+| Replies show an unexpected device instance or vendor | Another BACnet device is already answering on this host/port. On Linux/macOS two processes can share the port and both reply; on Windows the example asks for `SO_EXCLUSIVEADDRUSE` (`common/SimpleUDP.cpp`) so this shows up as a bind failure instead. Stop the other device, or use `--port`. |
 
 ## Extending the example
 
@@ -513,5 +630,41 @@ copy what you need into your product. The example source code is dedicated to th
 public domain under [CC0-1.0](LICENSE) - use it for anything, no attribution
 required. The CAS BACnet Stack is a separate, commercially licensed product and
 is not covered by CC0.
+
+### What to copy, what to rewrite
+
+`common/` is written for a **console demo**, not for a product. Copy it to get started, then
+expect to replace these before you ship:
+
+| In `common/` | Why it is not production code | What a product does instead |
+|---|---|---|
+| `printf` on every RX/TX in the transport callbacks (`CASExampleHelper.cpp`) | Console I/O on the BACnet hot path - slow, and noise once the device is real | Log to your own logger at debug level, or drop it |
+| The keyboard loop (`h`/`q`/arrows) | There is no console on an embedded device | Delete it; drive values from your real I/O |
+| `GetLocalIPv4()` picking the first non-loopback adapter | A guess; wrong on multi-homed hardware | Bind the interface your product is configured for |
+| `SimpleUDP` | Minimal blocking-socket demo | Your platform's networking stack |
+| `PrintVersion` / `--help` / `--port` / `--deviceID` | Demo ergonomics | Your own configuration mechanism |
+
+What you *should* keep the shape of: the three transport/time callbacks
+(`RegisterCommonCallbacks`), the deferred-restart pattern (`RequestRestart`/`RestartDue`), and
+the `LoadBACnetFunctions()` call at the top of `main()`.
+
+### Calling `BACnetStack_Tick()` in a real product
+
+The example calls `Tick()` in a tight loop with a 1 ms sleep. What the stack actually requires:
+
+- **Call it regularly.** Every timer the stack owns - APDU retries/timeouts, COV lifetimes,
+  DCC durations, Schedule/Trend evaluation - advances only inside `Tick()`. A gap means late
+  or missed BACnet behaviour, not a crash. Every ~10 ms is comfortable; do not let it drift
+  into hundreds of milliseconds.
+- **It is not free-running.** It does the work available and returns; it does not block.
+- **Single-threaded contract.** The stack contains **no locking of any kind** (no mutexes, no
+  atomics - grep it), and `Tick()` invokes your property callbacks on the calling thread,
+  synchronously, before it returns. So: call `Tick()` from exactly one thread, never
+  concurrently from two, and do not call any other `BACnetStack_*` function from a different
+  thread. If your application is multi-threaded, own the stack from one task and marshal work
+  to it (a queue your callbacks read from is the usual shape).
+- **Never block inside a callback.** A callback that waits on slow I/O stalls `Tick()`, and
+  with it every timer above. Serve cached values and do the slow work elsewhere (`main.cpp`
+  says the same at each `GetProperty*` callback).
 
 See also [CHANGELOG.md](CHANGELOG.md). Contributors and AI agents: [AGENTS.md](AGENTS.md) documents the repo conventions.

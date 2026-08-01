@@ -1,18 +1,21 @@
 # =============================================================================
 # CMake build for the BACnet B-ASC (Application Specific Controller) C++ example.
 #
-# This example links the CAS BACnet Stack by COMPILING IT FROM SOURCE: it builds
-# every file in the stack's source/ folder straight into the executable and
-# calls the stack's C API (CASBACnetStackDLL.h) directly. There is no DLL/.so to
-# build, copy, or ship first - everything compiles into one self-contained
-# executable.
+# This example links the CAS BACnet Stack through the CASBACnetStack::Adapter CMake
+# target (submodules/cas-bacnet-stack/adapters/cpp) and calls the stack's C API
+# (BACnetStack_*, via CASBACnetStackAdapter.h) directly - no fp* indirection, the same
+# call in every link mode. CAS_BACNET_STACK_LINK picks the mode (see below); it defaults
+# to SOURCE, which compiles every file in the stack's source/ folder straight into the
+# executable - there is no DLL/.so to build, copy, or ship first.
 #
-# NOTE: the first build compiles the entire stack (~600 source files), so it
+# NOTE: the first SOURCE-mode build compiles the entire stack (~600 source files), so it
 # takes a few minutes. Subsequent incremental builds are fast.
 #
 # Build:
 #   cmake -B build -S .
 #   cmake --build build --config Release
+# Build against a prebuilt DLL/.so instead of compiling from source:
+#   cmake -B build -S . -DCAS_BACNET_STACK_LINK=DLL
 # Run (from the example folder):
 #   ./build/BACnetExampleBASC          (Linux/macOS)
 #   .\build\Release\BACnetExampleBASC.exe   (Windows)
@@ -49,23 +52,20 @@ endif()
 if(NOT DEFINED CAS_STACK_DIR)
     set(CAS_STACK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/submodules/cas-bacnet-stack")
 endif()
-set(CAS_STACK_SOURCE_DIR "${CAS_STACK_DIR}/source")
 
-if(NOT EXISTS "${CAS_STACK_SOURCE_DIR}/CASBACnetStackDLL.h")
+if(NOT EXISTS "${CAS_STACK_DIR}/adapters/cpp/CMakeLists.txt")
     message(FATAL_ERROR
-        "CAS BACnet Stack source not found at: ${CAS_STACK_SOURCE_DIR}\n"
+        "CAS BACnet Stack adapter not found under: ${CAS_STACK_DIR}\n"
         "The stack is a git submodule. After cloning this repository, run:\n"
         "    git submodule update --init --recursive\n"
         "Or pass -D CAS_STACK_DIR=/path/to/cas-bacnet-stack to use a stack elsewhere.")
 endif()
 
-# --- Gather the CAS BACnet Stack source -------------------------------------
-# Compiling from source: grab every .cpp/.c in the stack's source/ folder. The
-# example calls the stack's C API (CASBACnetStackDLL.h) directly, so no adapter
-# layer is needed.
-file(GLOB CAS_STACK_SOURCES
-    "${CAS_STACK_SOURCE_DIR}/*.cpp"
-    "${CAS_STACK_SOURCE_DIR}/*.c")
+# --- The CAS BACnet Stack, via its CMake adapter target ---------------------
+# CAS_BACNET_STACK_LINK is the adapter's own cache variable (SOURCE/STATIC/DLL,
+# default SOURCE) - set it BEFORE add_subdirectory() so the adapter target picks it up.
+# See submodules/cas-bacnet-stack/adapters/cpp/CMakeLists.txt for what each mode does.
+add_subdirectory("${CAS_STACK_DIR}/adapters/cpp" cas-bacnet-stack-adapter)
 
 # --- The shared example helper ----------------------------------------------
 set(COMMON_SOURCES
@@ -75,16 +75,17 @@ set(COMMON_SOURCES
 # --- The executable ---------------------------------------------------------
 add_executable(BACnetExampleBASC
     main.cpp
-    ${COMMON_SOURCES}
-    ${CAS_STACK_SOURCES})
+    ${COMMON_SOURCES})
 
 target_include_directories(BACnetExampleBASC PRIVATE
-    "${EXAMPLES_COMMON_DIR}"
-    "${CAS_STACK_SOURCE_DIR}")
+    "${EXAMPLES_COMMON_DIR}")
+
+target_link_libraries(BACnetExampleBASC PRIVATE CASBACnetStack::Adapter)
 
 # --- Warnings on OUR sources only -------------------------------------------
 # Apply strict warnings to the example + helper sources, but NOT to the bundled
-# third-party stack (~600 files) which would be noisy and isn't ours to fix.
+# third-party stack (~600 files, built inside the CASBACnetStack::Adapter target)
+# which would be noisy and isn't ours to fix.
 if(MSVC)
     set(EXAMPLE_WARNINGS "/W4")
 else()

@@ -35,6 +35,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Links the CAS BACnet Stack through the `CASBACnetStack::Adapter` CMake
+  target instead of hand-globbing the stack's `source/*.cpp`.** `main.cpp` and
+  `common/CASExampleHelper.cpp` now include `CASBACnetStackAdapter.h` and call
+  `LoadBACnetFunctions()` once at the top of `main()`; every `BACnetStack_*`
+  call site is otherwise unchanged. `CAS_BACNET_STACK_LINK` (`SOURCE` default,
+  or `STATIC`/`DLL`) picks the link mode — see the README's new "Link modes"
+  section. **All three modes are verified**: `SOURCE` and `STATIC` build and run
+  against a live client, and `DLL` mode now loads the stack, binds all 213
+  exports, passes the version handshake and runs — plus both of its failure
+  paths (library absent; library present but missing an export) report a
+  readable error and exit cleanly rather than crashing.
+  The stack submodule is pinned to `6.x-TestTool` @ `756371c1`, which carries the
+  adapter work merged as cas-bacnet-stack PRs #267 and #268.
+  common/ bumped to v1.5.1 (see `common/CHANGELOG.md`) — this is a contract
+  change every example in the series needs when it re-syncs.
+- **Documentation corrections from a five-persona review** (lead developer,
+  educator, junior developer, BACnet newcomer, staff architect): the version
+  banner and sample output now match the shipped `common/` version (they claimed
+  v1.3.0 against a v1.5.0 tree — in a project whose own docs teach "the printed
+  versions are how you detect drift"); the BIBB `-A`/`-B` suffix convention,
+  `Protocol_Revision`, BACnet/SC and "BACnet internetwork" are now defined at
+  first use; the Verify section names free clients (YABE, Wireshark) alongside
+  the commercial one; and two new sections cover what in `common/` is demo-only
+  versus production-worthy, and the `BACnetStack_Tick()` cadence and
+  single-threading contract.
+- **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
+  ahead of the previous pin (`92c91d74`); includes the removal of the 13
+  `RegisterHookProperty*` exports, the `DecodeAsXML`/`DecodeAsJSON` →
+  `DecodeAs` fold, the `SetCOVMultipleSettings` rename, the
+  `SetBackupAndRestoreEnabled` signature change (absorbs
+  `backupFailureTimeout`), and the removal of `SetObjectTypeSupported` — none
+  of which this example calls. Known cosmetic side effect: the newly merged
+  BACnet/SC datalink logs a one-time "UUID has not been set" error on the
+  debug callback at start-up in applications that never configure BACnet/SC;
+  it latches its error flag and goes quiet. Functionality is unaffected.
 - **Stack pin moved to the series `6.x` branch (CAS BACnet Stack 6.0.0.0).**
   Which stack version this example requires is a material licensing fact.
 - The commandable-setup loop carries `{type, instance}` pairs instead of a

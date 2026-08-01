@@ -25,8 +25,10 @@
 // To change it: edit it, bump COMMON_VERSION, record the change in
 // common/CHANGELOG.md, then re-copy common/ into EVERY example in the series.
 //
-// The CAS BACnet Stack itself is compiled into the program from source, so its
-// C API (CASBACnetStackDLL.h) is linked directly - there is no "load" step.
+// The CAS BACnet Stack is linked via the C++ adapter (CASBACnetStackAdapter.h) -
+// BACnetStack_* is called directly, the same call whether the stack is compiled from
+// source, linked as a static lib, or loaded from a DLL/.so. The example's main() must
+// call LoadBACnetFunctions() once, before any BACnetStack_* call, in every mode.
 // =============================================================================
 
 #include <stdint.h>
@@ -38,7 +40,7 @@ namespace CASExampleHelper {
 // version). Bump it whenever anything in common/ changes, and record the
 // change in common/CHANGELOG.md - every example in the series must then be
 // re-synced to the same common/ version.
-static const char* COMMON_VERSION = "1.3.0";
+static const char* COMMON_VERSION = "1.5.1";
 
 // Print the example's name + version, the linked CAS BACnet Stack version,
 // and the common/ helper version.
@@ -90,6 +92,62 @@ void SendIAm(uint32_t deviceInstance);
 // IP_Subnet_Mask), and the broadcast (ip | ~mask) is the I-Am target. Returns
 // true on success; on failure the buffers are left untouched.
 bool GetLocalIPv4(uint8_t ipAddress[4], uint8_t subnetMask[4]);
+
+// --- Deferred device restart (DM-RD-B) -------------------------------------
+// Only for examples whose profile includes DM-RD-B (i.e. that register a
+// ReinitializeDevice callback). Most profiles in this series do not.
+//
+// WHY THIS EXISTS. A ReinitializeDevice callback must NOT restart the device
+// inside the callback. Returning true only tells the stack the request was
+// accepted - the SimpleACK is encoded now but does not reach the wire until a
+// later BACnetStack_Tick(). Restart (or exit, or reset) before that tick and
+// the ACK is never transmitted: the client sees a timeout and reports the
+// device as unresponsive, even though it did exactly what it was told. That is
+// the classic DM-RD-B interop bug, and it fails BTL.
+//
+// The fix is to defer: the callback records "a restart is due at time T" and
+// returns immediately; the main loop performs the restart once T has passed, by
+// which point the ACK has been sent. The delay also gives the client's own
+// request timer a chance to complete cleanly.
+//
+// Usage - in the ReinitializeDevice callback, after it decides to accept:
+//
+//     CASExampleHelper::RequestRestart(CASExampleHelper::RestartKind::Cold,
+//                                      CASExampleHelper::RESTART_DELAY_MS);
+//     return true;   // let the stack ACK first
+//
+// ...and once per tick in the main loop, after BACnetStack_Tick():
+//
+//     CASExampleHelper::RestartKind kind;
+//     if (CASExampleHelper::RestartDue(&kind)) {
+//         // a real device reboots here; see main.cpp for what this example does
+//     }
+
+enum class RestartKind {
+    Cold,   // REINITIALIZE_STATE_COLDSTART - full power-on restart
+    Warm    // REINITIALIZE_STATE_WARMSTART - re-initialize, keep what survives
+};
+
+// A restart delay that is comfortably longer than one tick of the main loop,
+// so the SimpleACK is on the wire before anything is torn down. One second is
+// the conventional choice: long enough to be safe on a busy or slow link,
+// short enough that the operator sees the device go down promptly.
+static const uint32_t RESTART_DELAY_MS = 1000;
+
+// Record that a restart of the given kind is due delayMilliseconds from now.
+// Safe to call more than once: the EARLIEST pending deadline wins, so a second
+// ReinitializeDevice arriving during the delay window cannot postpone a restart
+// that was already promised to the first client. A Cold request also upgrades a
+// pending Warm one (cold is the stronger reset); the reverse does not downgrade.
+void RequestRestart(RestartKind kind, uint32_t delayMilliseconds);
+
+// Call once per tick of the main loop. Returns true EXACTLY ONCE - on the first
+// call after the deadline has passed - and writes the requested kind to
+// *outKind. Returns false when no restart is pending or the delay has not yet
+// elapsed. Clearing the request before returning true means a caller that
+// handles the restart in-process (rather than actually rebooting) does not get
+// a second one on the next tick.
+bool RestartDue(RestartKind* outKind);
 
 // --- Keyboard input (common to every example) ------------------------------
 enum class KeyCommand {
