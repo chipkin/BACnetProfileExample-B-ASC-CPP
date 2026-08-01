@@ -41,8 +41,8 @@ and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   functions are always callable — "linked directly, there is no load step," per the
   old header comment); the adapter's DLL mode makes that no longer universally true,
   so the load step is now mandatory everywhere for one call to work in all three
-  modes. B-ASC is the first example adopted onto this; the other 7 need the same
-  `LoadBACnetFunctions()` call added to their `main()` when they re-sync to 1.5.0.
+  modes. Each example in the series adopts this as it re-syncs to 1.5.x, and its
+  `main()` must gain the `LoadBACnetFunctions()` call at that point.
 
 ## [1.4.0] - 2026-07-18
 
