@@ -18,7 +18,7 @@ second; this is the third and repeats everything it needs.
 
 > **Versions:** this document describes **example v1.1.0**, built and verified
 > against **CAS BACnet Stack 6.x** at **Protocol_Revision 24**, with the
-> vendored `common/` helper at **v1.5.0**. Running the example prints all three —
+> vendored `common/` helper at **v1.5.1**. Running the example prints all three —
 > if what it prints disagrees with this line, trust the program and check
 > `CHANGELOG.md`.
 >
