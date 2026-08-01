@@ -46,10 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exports, passes the version handshake and runs — plus both of its failure
   paths (library absent; library present but missing an export) report a
   readable error and exit cleanly rather than crashing.
-  **TEMPORARY:** the stack submodule pin currently points at the
-  `adapter-cpp-package` branch tip (stacked on `adapter-cpp-generate`), not
-  `6.x-TestTool` — see cas-bacnet-stack PRs #267 and #268; re-pin once both merge.
-  common/ bumped to v1.5.0 (see `common/CHANGELOG.md`) — this is a contract
+  The stack submodule is pinned to `6.x-TestTool` @ `756371c1`, which carries the
+  adapter work merged as cas-bacnet-stack PRs #267 and #268.
+  common/ bumped to v1.5.1 (see `common/CHANGELOG.md`) — this is a contract
   change every example in the series needs when it re-syncs.
 - **Documentation corrections from a five-persona review** (lead developer,
   educator, junior developer, BACnet newcomer, staff architect): the version
