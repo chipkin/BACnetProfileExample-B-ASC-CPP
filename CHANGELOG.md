@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - unreleased
+
+### Changed — STATIC link, generated README blocks
+
+- **Stack re-pinned to `6.x` @ `abd4cee1` (reports itself as 6.0.21), tracking the
+  `6.x` branch** (`.gitmodules` `branch = 6.x`), up from `6.x-TestTool` @
+  `756371c1`.
+- **Links the CAS BACnet Stack as a prebuilt STATIC library**
+  (`CAS_BACNET_STACK_LINK=STATIC`, built by `tools/build-stack-static.sh` from the
+  stack's own project files) instead of compiling the stack from `source/` into
+  this project. `CMakeLists.txt`, the README "Link mode" section and
+  `AGENTS.md` now describe STATIC only; the adapter's SOURCE mode gets one
+  line noting it exists. No DLL mode is documented or shipped.
+- **`.github/workflows/release.yml` rewritten**: builds the STATIC library (cached
+  on the submodule SHA), asserts `CAS_BACNET_STACK_LINK=STATIC` from
+  `CMakeCache.txt`, and publishes `metrics-windows.json` / `metrics-linux.json`
+  (binary size, SHA-256 prefix, start-up time to `ready`, stack commit, link
+  mode, compiler) as release assets alongside the binaries.
+- **README gained three generated/filled sections**: `## Objects and properties`
+  (from `docs/objects.json` via `tools/gen-objects-properties.py`), `## The
+  BACnet profile example series` (the series profile table, via
+  `tools/sync-profile-table.sh`), and `## Footprint` (filled from
+  `metrics-*.json` at release; currently the placeholder row).
+
+### Changed — updated to the current CAS BACnet Stack interface
+
+Three interface changes reach this example versus the prior `6.x-TestTool` pin
+`756371c1`; the full list, with before/after signatures, is on cas-bacnet-stack
+issue #1641.
+
+- **Every `GetProperty*` callback gained a trailing `uint32_t* errorCode`**
+  (stack issue #974). The stack presets it to `success` and reads it only on a
+  `false` return, so a declining callback can now name the BACnet error the
+  client receives. `main.cpp` uses it in exactly one place — `State_Text` with an
+  out-of-range array index now answers `Error(property, invalid-array-index)`
+  instead of an empty string — and deliberately leaves it alone on every
+  catch-all `return false`, because the stack's decline-and-fabricate fallback is
+  what answers required properties this application does not serve (the Device's
+  `Max_APDU_Length_Accepted`, `APDU_Timeout` and `Number_Of_APDU_Retries`). The
+  `DeviceCommunicationControl` callback is the one place in this file where
+  `*errorCode` has no fallback and must be set on every `false` return, as its
+  commentary explains.
+- **`BACnetStack_AddNetworkPortObjectWithNetworkNumber()` is gone**, folded into
+  `BACnetStack_AddNetworkPortObject()`, which now always takes the network number
+  and its quality. Same arguments, one function.
+- **Links are identified by Network Port object instance, not network type**
+  (stack issues #822/#556) — the transport callbacks and `SendIAm` all changed.
+  Handled in `common/`; `main.cpp` calls the new
+  `CASExampleHelper::SetNetworkPortInstance()` before
+  `RegisterCommonCallbacks()`.
+
+`common/` is replaced wholesale with the series-wide vendored copy at **2.1.0**
+(up from `1.5.1`; see `common/CHANGELOG.md` for its full history) — identical
+byte-for-byte across every example in the series.
+
+### Verified
+
+Built on Windows/MSVC (STATIC link) and exercised against a BACnet client:
+Who-Is → I-Am (device 389003, vendor 389); ReadProperty of every required
+property of all eight objects returns the expected value, `Protocol_Revision`
+is 24 and `Object_List` lists all eight; WriteProperty to each commandable
+output at two priorities followed by a NULL relinquish falls back correctly to
+`Relinquish_Default`; DeviceCommunicationControl accepts `enable` and
+`disable-initiation`, rejects the deprecated plain `disable` with
+`service-request-denied`, and (with `DCC_PASSWORD` set) rejects a wrong
+password with `password-failure`.
+
 ## [1.1.0] - unreleased
 
 > Not tagged yet: `v1.0.0` is the only tag in this repository, so there is no
@@ -136,5 +203,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflow that builds Windows + Linux and publishes a release on
   a `vX.Y.Z` tag, with a smoke-test step before packaging.
 
+[1.2.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
 [1.1.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/releases/tag/v1.0.0

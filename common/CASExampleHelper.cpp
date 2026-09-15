@@ -51,6 +51,14 @@ SimpleUDP g_udp;
 // The BACnet/IP port the device is bound to (used to address broadcast I-Am).
 uint16_t g_port = 47808;
 
+// The instance of the Network Port object that owns this UDP socket. The stack
+// identifies a link by its Network Port object INSTANCE, not by a transport
+// network type, so the transport callbacks and SendIAm all have to name it.
+// The example's main() tells us which one it added, via
+// SetNetworkPortInstance(); the default matches the series convention of a
+// single Network Port at instance 1.
+uint32_t g_networkPortInstance = 1;
+
 // ---------------------------------------------------------------------------
 // Transport callback: the stack calls this to RECEIVE a BACnet message.
 //
@@ -65,7 +73,7 @@ uint16_t HelperReceiveMessage(uint8_t* message, const uint16_t maxMessageLength,
                               uint8_t* destinationConnectionString,
                               uint8_t* destinationConnectionStringLength,
                               const uint8_t maxConnectionStringLength,
-                              uint8_t* networkType) {
+                              uint32_t* networkPortInstance) {
     (void)destinationConnectionString;
     (void)destinationConnectionStringLength;
     if (maxConnectionStringLength < 6) {
@@ -94,7 +102,13 @@ uint16_t HelperReceiveMessage(uint8_t* message, const uint16_t maxMessageLength,
     sourceConnectionString[5] = (uint8_t)(fromPort & 0xFF);
     *sourceConnectionStringLength = 6;
 
-    *networkType = CASBACnetStackExampleConstants::NETWORK_TYPE_IP;
+    // Tell the stack WHICH Network Port object this datagram arrived on. The
+    // stack used to ask only for the transport's network TYPE here; since the
+    // per-port work (CAS BACnet Stack issue #822/#556) it wants the instance of
+    // the Network Port object that owns this link, so a multi-port device can
+    // answer on the port a request came in on. This example has exactly one
+    // port, so it always reports that one - see SetNetworkPortInstance().
+    *networkPortInstance = g_networkPortInstance;
     return bytesRead;
 }
 
@@ -108,8 +122,11 @@ uint16_t HelperReceiveMessage(uint8_t* message, const uint16_t maxMessageLength,
 uint16_t HelperSendMessage(const uint8_t* message, const uint16_t messageLength,
                            const uint8_t* connectionString,
                            const uint8_t connectionStringLength,
-                           const uint8_t networkType, const bool broadcast) {
-    if (networkType != CASBACnetStackExampleConstants::NETWORK_TYPE_IP ||
+                           const uint32_t networkPortInstance, const bool broadcast) {
+    // The stack names the Network Port object the message is to leave by (it
+    // used to name the transport's network type). This example serves exactly
+    // one port, so anything else is not ours to send.
+    if (networkPortInstance != g_networkPortInstance ||
         connectionStringLength < 6) {
         return 0;
     }
@@ -128,8 +145,12 @@ uint16_t HelperSendMessage(const uint8_t* message, const uint16_t messageLength,
 // ---------------------------------------------------------------------------
 // Time callback: the stack asks the application for the current system time.
 // ---------------------------------------------------------------------------
-time_t HelperGetSystemTime() {
-    return time(0);
+// CASBACnetTime is the stack's own time type (int64_t seconds since the UNIX
+// epoch). It replaced time_t, whose width differs between platforms and build
+// settings - a 32-bit time_t on one side of the ABI and a 64-bit one on the
+// other silently corrupted every timestamp.
+CASBACnetTime HelperGetSystemTime() {
+    return (CASBACnetTime)time(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -419,9 +440,13 @@ void ShutdownUDP() {
     g_udp.Disconnect();
 }
 
+void SetNetworkPortInstance(const uint32_t networkPortInstance) {
+    g_networkPortInstance = networkPortInstance;
+}
+
 void RegisterCommonCallbacks() {
-    BACnetStack_RegisterCallbackReceiveMessage(HelperReceiveMessage);
-    BACnetStack_RegisterCallbackSendMessage(HelperSendMessage);
+    BACnetStack_RegisterCallbackReceiveMessageForPort(HelperReceiveMessage);
+    BACnetStack_RegisterCallbackSendMessageForPort(HelperSendMessage);
     BACnetStack_RegisterCallbackGetSystemTime(HelperGetSystemTime);
 }
 
@@ -449,7 +474,7 @@ void SendIAm(const uint32_t deviceInstance) {
     };
     // destinationNetwork 0 = the local network only (not the global 0xFFFF).
     BACnetStack_SendIAm(deviceInstance, connectionString, 6,
-                        CASBACnetStackExampleConstants::NETWORK_TYPE_IP,
+                        g_networkPortInstance,
                         true /*broadcast*/, 0 /*local network*/, NULL, 0);
 }
 
@@ -467,6 +492,7 @@ KeyCommand PollKey() {
     }
     if (c == 'h' || c == 'H') return KeyCommand::Help;
     if (c == 'q' || c == 'Q') return KeyCommand::Quit;
+    if (c == 's' || c == 'S') return KeyCommand::DemoAdvance;
     return KeyCommand::None;
 #else
     EnableRawInput();
@@ -482,6 +508,7 @@ KeyCommand PollKey() {
     }
     if (buf[0] == 'h' || buf[0] == 'H') return KeyCommand::Help;
     if (buf[0] == 'q' || buf[0] == 'Q') return KeyCommand::Quit;
+    if (buf[0] == 's' || buf[0] == 'S') return KeyCommand::DemoAdvance;
     return KeyCommand::None;
 #endif
 }

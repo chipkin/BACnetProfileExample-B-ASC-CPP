@@ -16,11 +16,11 @@ Sensor)](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP) is the first 
 series and [B-SA (Smart Actuator)](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP) the
 second; this is the third and repeats everything it needs.
 
-> **Versions:** this document describes **example v1.1.0**, built and verified
-> against **CAS BACnet Stack 6.x** at **Protocol_Revision 24**, with the
-> vendored `common/` helper at **v1.5.1**. Running the example prints all three —
-> if what it prints disagrees with this line, trust the program and check
-> `CHANGELOG.md`.
+> **Versions:** this document describes **example v1.2.0**, built and verified
+> against **CAS BACnet Stack 6.0.21** (`6.x` @ `abd4cee1`), linked as a static
+> library, at **Protocol_Revision 24**, with the vendored `common/` helper at
+> **v2.1.0**. Running the example prints all three - if what it prints
+> disagrees with this line, trust the program and check `CHANGELOG.md`.
 >
 > **Protocol_Revision** is the revision of the ASHRAE 135 standard a device claims to conform
 > to. It is a number every BACnet device advertises, and it changes real behaviour: at revision
@@ -36,13 +36,13 @@ Then:
 ```bash
 git clone --recursive https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP.git
 cd BACnetProfileExample-B-ASC-CPP
-cmake -B build -S .
+tools/build-stack-static.sh BACnetProfileExample-B-ASC-CPP    # from the series root; builds the static library
+cmake -B build -S . -DCAS_BACNET_STACK_LINK=STATIC
 cmake --build build --config Release
 ./build/Release/BACnetExampleBASC.exe        # Windows; drop Release/ on Linux
 ```
 
 The device announces itself, answers Who-Is, and prints `Press 'h' for help`.
-The first build compiles the whole stack (~600 files) and takes a few minutes.
 
 > **You will see one or more red `Error:` lines at start-up. The device is fine** —
 > it hears its own broadcast I-Am and the stack logs a benign decode cascade. See
@@ -124,12 +124,37 @@ The CAS BACnet Stack runs the actual enable/disable state machine and the
 re-enable timer; this example's callback (`DeviceCommunicationControl` in
 `main.cpp`) just **validates the password** and logs what was asked.
 
+Concretely, the callback:
+
+1. Rejects a request for any device instance other than this one, naming
+   `optional-functionality-not-supported` on the wire.
+2. Compares the supplied password to `DCC_PASSWORD` by **length first, then
+   bytes** - never `strcmp`, because a BACnet CharacterString may legitimately
+   contain an embedded NUL that `strcmp` would silently stop at. A device with
+   no configured password (`DCC_PASSWORD == ""`, the shipped default) accepts
+   any request. A mismatch is rejected with `*errorCode =
+   ERROR_CODE_PASSWORD_FAILURE`, which the stack pairs with `Error Class =
+   SECURITY` (clause 16.1.1.3.1).
+3. On a correct (or absent) password, accepts and logs the requested action -
+   `enable`, the deprecated `disable`, or `disable-initiation` - and the
+   optional time duration.
+4. **Sets `*errorCode` on every `false` return, with no exception.** Unlike the
+   `SetProperty*` callbacks (which have a sensible `writeAccessDenied`
+   fallback), DeviceCommunicationControl has no default: the stack presets
+   `*errorCode` to `success` (84) and, on `false`, answers `Error Class =
+   SECURITY` when the code is `password-failure` or `Error Class = SERVICES`
+   otherwise. Returning `false` without setting `*errorCode` puts the literal
+   nonsense "Error Code = success(84)" on the wire - `main.cpp` never does
+   that.
+
 > **Protocol_Revision >= 20 note:** the plain **`disable`** value (stop initiating
 > *and* responding) is **deprecated**. At Protocol_Revision 24 the stack rejects it
 > with `service-request-denied`; the modern choice is **`disable-initiation`** (the
 > device keeps answering reads but stops initiating). So in practice only
 > `enable` and `disable-initiation` take effect - the example demonstrates exactly
-> this.
+> this, and its callback still logs what the client asked for even on that
+> deprecated path, since the rejection happens in the stack after the callback
+> returns.
 
 The example ships with **no password** (`DCC_PASSWORD = ""`, accept any request).
 Set it to your device's secret to require one; a mismatch is rejected with
@@ -257,25 +282,9 @@ This is a **self-contained** project. It ships:
 - `main.cpp` - the example device.
 - `common/` - the shared helper (UDP, callbacks, CLI, keyboard) vendored in.
 - `submodules/cas-bacnet-stack/` - the **CAS BACnet Stack as a git submodule**
-  (private; requires a license - see above). Compiled from source; no prebuilt
-  library or DLL is shipped.
-
-## Footprint & performance
-
-This example statically compiles the **entire** CAS BACnet Stack into one
-executable (no external runtime/DLL). Release-build sizes of the whole
-application (stack + example):
-
-| Platform | Binary | Size |
-|----------|--------|------|
-| Windows x64 (MSVC, Release) | `BACnetExampleBASC.exe` | ~3.0 MB |
-| Linux x64 (GCC, Release) | `BACnetExampleBASC` | ~6 MB unstripped (`strip` cuts it substantially) |
-
-These are whole-application sizes. The stack's flash/RAM footprint on a
-constrained MCU, CPU cost per `BACnetStack_Tick()`, request latency, and the
-maximum number of objects depend on your target and configuration. For
-embedded-sizing and benchmark figures, contact Chipkin -
-<https://store.chipkin.com/services/stacks/bacnet-stack>.
+  (private; requires a license - see above). Built into a prebuilt **STATIC**
+  library by the stack's own project files (`tools/build-stack-static.sh`),
+  then linked - no DLL is shipped.
 
 ## Prerequisites
 
@@ -309,13 +318,22 @@ git submodule update --init --recursive
 
 ## Build
 
+This example links the CAS BACnet Stack as a prebuilt **STATIC** library. Build
+the library once from the pinned submodule commit, then configure and build the
+example against it:
+
 ```bash
-cmake -B build -S .
+tools/build-stack-static.sh BACnetProfileExample-B-ASC-CPP   # from the series root; builds
+                                                                # submodules/cas-bacnet-stack/bin/...
+cmake -B build -S . -DCAS_BACNET_STACK_LINK=STATIC
 cmake --build build --config Release
 ```
 
-> **First build takes a few minutes** - it compiles the entire CAS BACnet Stack
-> (~600 source files) once. Incremental rebuilds after that are fast.
+> **The stack library build takes a few minutes** the first time - it compiles
+> the entire CAS BACnet Stack (~600 source files) once, via the stack's own
+> project files (`msbuild` on Windows, `make` on Linux). The example itself
+> (`main.cpp` + `common/`) then builds in seconds against that library, and
+> rebuilds after that are incremental.
 >
 > Build in parallel to cut that down substantially - this is worth doing on the first
 > build of the day, and essential if you are running a class through it:
@@ -327,66 +345,27 @@ cmake --build build --config Release
 If your CAS BACnet Stack lives somewhere other than the bundled submodule, point
 CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 
-### Link modes
+### Link mode
 
 This example links the stack through the `CASBACnetStack::Adapter` CMake target
-(`submodules/cas-bacnet-stack/adapters/cpp`). `CAS_BACNET_STACK_LINK` picks how:
+(`submodules/cas-bacnet-stack/adapters/cpp`) in **STATIC** mode -
+`-DCAS_BACNET_STACK_LINK=STATIC` links the prebuilt
+`CASBACnetStack_x64_Release.lib` / `libCASBACnetStack_x64_Release.a` built by
+`tools/build-stack-static.sh` above. **Application code is identical
+regardless of link mode** - `main.cpp` and `common/` call `BACnetStack_AddDevice(...)`
+and friends by the exact export name. Every mode requires calling
+`LoadBACnetFunctions()` once at the top of `main()` before any other
+`BACnetStack_*` call, which runs a version handshake; if it fails,
+`CASBACnetStackAdapter_LastError()` says why and the program exits with a
+message rather than crashing.
 
-```bash
-cmake -B build -S .                                   # SOURCE (default) - compiles the stack in
-cmake -B build -S . -D CAS_BACNET_STACK_LINK=STATIC    # link a prebuilt .lib/.a
-cmake -B build -S . -D CAS_BACNET_STACK_LINK=DLL       # load a prebuilt .dll/.so at runtime
-```
+On MSVC the adapter also forces the static CRT (`/MT`) to match how the library is
+built — a mismatched runtime otherwise produces hundreds of `LNK2038` errors that
+look like a corrupt library.
 
-**Application code is identical in every mode.** `main.cpp` and `common/` call
-`BACnetStack_AddDevice(...)` and friends by the exact export name; switching modes changes
-only the CMake flag, never a line of your code. The one requirement all three share is calling
-`LoadBACnetFunctions()` once at the top of `main()` before any other `BACnetStack_*` call — in
-`DLL` mode that is the step that binds the symbols, and it also runs a version handshake in
-every mode.
-
-**Extra step for `STATIC` mode:** build the static library first — this mode links a prebuilt
-`.lib`/`.a`, it does not compile the stack.
-
-```bash
-# Windows: build CASBACnetStack_x64_Release.lib (ReleaseLib|x64) into <stack>/bin/
-msbuild submodules/cas-bacnet-stack/projects/msvs/CASBACnetStack/CASBACnetStack.vcxproj \
-        /p:Configuration=ReleaseLib /p:Platform=x64
-```
-
-CMake then finds it automatically in the stack's `bin/`; point elsewhere with
-`-D CAS_BACNET_STACK_LIB=/path/to/lib`. If no library is there, configuration stops with
-that `msbuild` line in the error rather than failing later at link. On MSVC the adapter also
-forces the static CRT (`/MT`) to match how the library is built — mixing runtimes otherwise
-produces hundreds of `LNK2038` errors that look like a corrupt library.
-
-**Extra step for `DLL` mode:** build the library and put it where the executable can find it.
-
-```bash
-# Windows: build CASBACnetStack_x64_Release.dll (ReleaseDll|x64)
-msbuild submodules/cas-bacnet-stack/projects/msvs/CASBACnetStack/CASBACnetStack.vcxproj \
-        /p:Configuration=ReleaseDll /p:Platform=x64
-# then copy submodules/cas-bacnet-stack/bin/CASBACnetStack_x64_Release.dll
-# next to build-dll/Release/BACnetExampleBASC.exe
-```
-
-If it cannot be loaded, `LoadBACnetFunctions()` returns false and
-`CASBACnetStackAdapter_LastError()` says why — `could not load
-CASBACnetStack_x64_Release.dll` when the file is absent, or `missing export:
-BACnetStack_<name>` when the library is the wrong build. The program exits with a message
-rather than crashing.
-
-> **Verified:** all three modes were built **and run** for this release — `SOURCE`,
-> `STATIC` (confirmed with no DLL beside the executable, which is the point of static
-> linking), and `DLL`. `DLL` mode was additionally checked for both failure paths (library
-> absent; library present but missing an export) — each reports a readable error and exits
-> cleanly.
->
-> Note the default library name is looked up on the OS search path and **relative to the
-> current working directory**, not to the executable's directory — so launching from a
-> different working directory will not find a DLL that merely sits beside the .exe. Define
-> `BACNET_LIB_FILE` to an absolute path if that matters to your deployment (see
-> `adapters/cpp/CASBACnetStackAdapter.h`).
+The adapter also offers a **SOURCE** mode (compiles the stack's `source/*.cpp`
+straight into the executable, no library build step) - this example is built
+and published in **STATIC** mode only.
 
 ## Run
 
@@ -401,9 +380,9 @@ rather than crashing.
 Expected output:
 
 ```
-BACnet B-ASC (Application Specific Controller) Example - C++ v1.1.0
-CAS BACnet Stack version: 6.0.0.0
-Common helper (common/) version: 1.5.1
+BACnet B-ASC (Application Specific Controller) Example - C++ v1.2.0
+CAS BACnet Stack version: 6.0.21.0
+Common helper (common/) version: 2.1.0
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
@@ -490,7 +469,7 @@ Then:
 |---------|-------------|
 | On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC (BACnet Secure Connect, the TLS/WebSocket-based transport added in ASHRAE 135-2020) datalink that these BACnet/IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line (just the UUID one); on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
 | CMake error: *"CAS BACnet Stack adapter not found under: ..."* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
-| CMake error: *"CAS_BACNET_STACK_LINK=STATIC needs a prebuilt CAS BACnet Stack library"* | `STATIC` links a library you build separately; it does not compile the stack. Either build it (the message gives the exact `msbuild` line) and re-run CMake, or use the default `SOURCE` mode, which needs no prebuilt library. |
+| CMake error: *"CAS_BACNET_STACK_LINK=STATIC needs a prebuilt CAS BACnet Stack library"* | The static library has not been built yet. Run `tools/build-stack-static.sh BACnetProfileExample-B-ASC-CPP` from the series root, then re-run CMake. |
 | The device starts and prints `TX ... (broadcast)`, but no client ever sees it | Check the IP in that `TX` line against the subnet your BACnet client is on. The example picks the **first non-loopback adapter** the OS reports, which on a laptop with Hyper-V, WSL, VirtualBox or a VPN is frequently not your Wi-Fi/Ethernet. There is no `--interface` option yet; disable the unwanted virtual adapters, or run on a machine without them. (Also check the firewall row above.) |
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |
@@ -527,10 +506,22 @@ that is easiest to miss is the one BTL will fail you for, and it fails SILENTLY.
 >
 > | Property | If you forget to serve it | Loud? |
 > |---|---|:--:|
-> | `Present_Value` | Error (`value-not-initialized`) | yes |
+> | `Present_Value` | Error (`read-access-denied`) | yes |
 > | `Object_Name` | reads back as the string **`"undefined"`** | **no** |
 > | `Units` | reads back as **`no-units` (95)** | **no** |
 >
+> **Doesn't the `errorCode` out-parameter fix this?** Only if you use it, and
+> only where it is right to. Each `GetProperty*` callback ends with a
+> `uint32_t* errorCode` that the stack presets to `success` and reads only when
+> you return `false`, so you *can* turn any decline into a chosen BACnet error.
+> But ending every callback with `*errorCode = unknown-property` breaks the
+> device: the stack's decline-and-fabricate path is what answers required
+> properties an application is not expected to serve — the Device's
+> `Max_APDU_Length_Accepted`, `APDU_Timeout` and `Number_Of_APDU_Retries` among
+> them. Name an error on the catch-all and those start failing instead of
+> answering. Set `errorCode` only where *this device* knows the read is wrong;
+> `main.cpp` does it in exactly one place, `State_Text` with an out-of-range
+> array index.
 >
 > It is worse than "wrong value": the object's `Property_List` **still advertises
 > `Units` (117)**. So the object actively claims to have the property, and then
@@ -606,6 +597,240 @@ For Analog Input 1, the whole picture:
 
 Going beyond this (COV, alarms, scheduling) means implementing a richer profile -
 a later example in this series.
+
+## Objects and properties
+
+<!-- OBJECTS-PROPERTIES:BEGIN (generated by tools/gen-objects-properties.py from docs/objects.json - do not edit here) -->
+Every object this example creates, and every REQUIRED property of each (per ANSI/ASHRAE 135-2024 clause 12 and the stack's `docs/property-profile-reference.md`), plus the optional properties the example turns on. **Served by** says who answers a ReadProperty: the **stack** generates it, or the **app** serves it from a `GetProperty*` callback in `main.cpp`. A ⚠ row is a required property the app does not serve and the stack would fill with a default - that is a defect, not a feature.
+
+### Device 389003 "Rainbow" - vendor 389 (Chipkin Automation Systems); instance configurable with --deviceID. The properties in 'accepted' are not served from a GetProperty callback because the stack itself is the source of truth for them - Protocol_Revision/Protocol_Version are stack build constants, Protocol_Services_Supported/Protocol_Object_Types_Supported are computed from the BACnetStack_SetServiceEnabled/AddObject calls this example already makes, Object_List and Device_Address_Binding are live stack-maintained tables, System_Status/Database_Revision/Max_APDU_Length_Accepted/Segmentation_Supported/APDU_Timeout/Number_Of_APDU_Retries are the stack's own configuration defaults for a device this example does not override
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| System_Status | BACnetDeviceStatus | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Vendor_Name | CharacterString | app | no |
+| Vendor_Identifier | Unsigned16 | app | no |
+| Model_Name | CharacterString | app | no |
+| Firmware_Revision | CharacterString | app | no |
+| Application_Software_Version | CharacterString | app | no |
+| Description *(optional, enabled)* | CharacterString | app | no |
+| Protocol_Version | Unsigned | stack default, accepted (`BACNET_PROTOCOL_VERSION`) | no |
+| Protocol_Revision | Unsigned | stack default, accepted (`BACNET_PROTOCOL_REVISION`) | no |
+| Protocol_Services_Supported | BACnetServicesSupported | stack default, accepted (computed from which services are enabled) | no |
+| Protocol_Object_Types_Supported | BACnetObjectTypesSupported | stack default, accepted (computed from which object types are supported) | no |
+| Object_List | BACnetARRAY[N] of BACnetObjectIdentifier | stack default, accepted (None known - a read fails with `unknown-property` or an empt) | no |
+| Max_APDU_Length_Accepted | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_MAX_APDU_LENGTH_ACCEPTED`) | no |
+| Segmentation_Supported | BACnetSegmentation | stack default, accepted (`BACnetSegmentation::noSegmentation`) | no |
+| APDU_Timeout | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_APDU_TIMEOUT`) | no |
+| Number_Of_APDU_Retries | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_NUMBER_OF_APDU_RETRIES`) | no |
+| Device_Address_Binding | BACnetLIST of BACnetAddressBinding | stack default, accepted (the live Device_Address_Binding (DAB) table) | no |
+| Database_Revision | Unsigned | stack default, accepted (Generic UnsignedInteger default: `0`) | no |
+
+### Analog Input 1 "Bronze" - REAL, degrees Celsius; starts at 21.5; read-only
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | Real | app | no |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Units | BACnetEngineeringUnits | app | no |
+
+### Binary Input 1 "Emerald" - starts inactive; read-only
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | BACnetBinaryPV | app | no |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Polarity | BACnetPolarity | app | no |
+
+### Multi-state Input 1 "Hot Pink" - state 1 of 3: On, Off, Auto; read-only
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | Unsigned | app | no |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Number_Of_States | Unsigned | app | no |
+| State_Text *(optional, enabled)* | BACnetARRAY[N] of CharacterString | app | no |
+
+### Analog Output 1 "Chartreuse" - REAL setpoint, default 20.0 C; commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyReal/GetPropertyBool
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | Real | stack | yes |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Units | BACnetEngineeringUnits | app | no |
+| Priority_Array | BACnetARRAY[16] of BACnetOptionalReal | stack | no |
+| Relinquish_Default | Real | app | no |
+| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
+
+### Binary Output 1 "Fuchsia" - active/inactive, default inactive; commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyEnumerated/GetPropertyBool
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | BACnetBinaryPV | stack | yes |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Polarity | BACnetPolarity | app | no |
+| Priority_Array | BACnetARRAY[16] of BACnetOptionalBinaryPV | stack | no |
+| Relinquish_Default | BACnetBinaryPV | app | no |
+| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
+
+### Multi-state Output 1 "Indigo" - state 1 of 3, default state 1; commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyUnsignedInteger/GetPropertyBool
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Present_Value | Unsigned | stack | yes |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Number_Of_States | Unsigned | app | no |
+| Priority_Array | BACnetARRAY[16] of BACnetOptionalUnsigned | stack | no |
+| Relinquish_Default | Unsigned | app | no |
+| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
+
+### Network Port 1 "Vermilion" - BACnet/IP; Network_Type and Protocol_Level are set from BACnetStack_AddNetworkPortObject()'s arguments (IPv4, BACnet Application) at start-up, not a GetProperty callback like the object's other app-served rows; Changes_Pending is likewise computed and answered natively by the stack's Network Port object. Reliability has no fault condition this example detects, so it is accepted at the generic default (normal)
+
+| Property | Datatype | Served by | Writable |
+|---|---|---|:---:|
+| Object_Identifier | BACnetObjectIdentifier | stack | no |
+| Object_Name | CharacterString | app | no |
+| Object_Type | BACnetObjectType | stack | no |
+| Status_Flags | BACnetStatusFlags | stack | no |
+| Reliability | BACnetReliability | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Out_Of_Service | Boolean | app | no |
+| Network_Type | BACnetNetworkType | app | no |
+| Protocol_Level | BACnetProtocolLevel | app | no |
+| Changes_Pending | Boolean | app | no |
+
+<!-- OBJECTS-PROPERTIES:END -->
+
+## The BACnet profile example series
+
+<!-- PROFILE-TABLE:BEGIN (generated from cas-bacnet-stack-examples/docs/profile-table.md - do not edit here) -->
+The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-2024 Annex L. One example repository per profile shows how. ✅ = the required BIBB (service) is supported by the CAS BACnet Stack; the **Example** column is the state of that profile's tutorial repository.
+
+### Controllers (Annex L.4)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-SS** Smart Sensor | [B-SS-CPP](https://github.com/chipkin/BACnetProfileExample-B-SS-CPP) ✅ | ✅ DS-RP-B · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-SA** Smart Actuator | [B-SA-CPP](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP) ✅ | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-ASC** Application Specific Controller | [B-ASC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP) ✅ · [B-ASC-Node](https://github.com/chipkin/BACnetProfileExample-B-ASC-Node) ✅ | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B |
+| **B-AAC** Advanced Application Controller | [B-AAC-CPP](https://github.com/chipkin/BACnetProfileExample-B-AAC-CPP) ✅ | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ AE-N-I-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-CRL-B · ✅ SCHED-I-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B |
+| **B-BC** Building Controller | [B-BC-CPP](https://github.com/chipkin/BACnetProfileExample-B-BC-CPP) 📝 | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-RPM-B · ✅ DS-WP-A · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ AE-N-I-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-CRL-B · ✅ SCHED-E-B · ✅ T-VMT-I-B · ✅ T-ATR-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B · ✅ DM-BR-B |
+
+### Life safety controllers (Annex L.5)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-LSC** Life Safety Controller | [B-LSC-CPP](https://github.com/chipkin/BACnetProfileExample-B-LSC-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-B · ✅ AE-LS-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B |
+| **B-ALSC** Advanced Life Safety Controller | [B-ALSC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ALSC-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-B · ✅ AE-LS-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-EL-I-B · ✅ SCHED-I-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B |
+
+### Access control controllers (Annex L.6)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-ACC** Access Control Controller | [B-ACC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACC-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-B · ✅ DS-ACUC-B · ✅ DS-ACSC-B · ✅ AE-AC-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-EL-I-B · ✅ SCHED-I-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B · ✅ DM-BR-B |
+| **B-AACC** Advanced Access Control Controller | [B-AACC-CPP](https://github.com/chipkin/BACnetProfileExample-B-AACC-CPP) 📝 | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-RPM-B · ✅ DS-WP-A · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-A · ✅ DS-COV-B · ✅ DS-ACAD-A · ☐ DS-ACCDI-A · ✅ DS-ACUC-B · ✅ DS-ACSC-B · ✅ AE-AC-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-EL-I-B · ✅ SCHED-I-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B · ✅ DM-BR-B |
+
+### Lighting controllers (Annex L.11)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-LD** Lighting Device | [B-LD-CPP](https://github.com/chipkin/BACnetProfileExample-B-LD-CPP) ✅ | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DS-LO-B / DS-BLO-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B |
+| **B-LS** Lighting Supervisor | [B-LS-CPP](https://github.com/chipkin/BACnetProfileExample-B-LS-CPP) 📝 | ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-WP-B · ✅ DS-WG-E-B · ✅ DS-ALO-A · ✅ SCHED-E-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B |
+
+### Elevator controllers (Annex L.13)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-EM** Elevator Monitor | [B-EM-CPP](https://github.com/chipkin/BACnetProfileExample-B-EM-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-COV-B · ✅ DS-COVM-B · ✅ AE-N-I-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B |
+| **B-EC** Elevator Controller | [B-EC-CPP](https://github.com/chipkin/BACnetProfileExample-B-EC-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-B · ✅ DS-COVM-B · ✅ AE-N-I-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-RD-B |
+| **B-AEC** Advanced Elevator Controller | [B-AEC-CPP](https://github.com/chipkin/BACnetProfileExample-B-AEC-CPP) 📝 | ✅ DS-RP-B · ✅ DS-RPM-B · ✅ DS-WP-B · ✅ DS-WPM-B · ✅ DS-COV-B · ✅ DS-COVM-B · ✅ AE-N-I-B · ✅ AE-ACK-B · ✅ AE-INFO-B · ✅ AE-EL-I-B · ✅ SCHED-I-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B · ✅ DM-OCD-B · ✅ DM-RD-B · ✅ DM-BR-B |
+
+### Authentication and authorization (Annex L.14)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-AS** Authorization Server | [B-AS-CPP](https://github.com/chipkin/BACnetProfileExample-B-AS-CPP) 📝 | ✅ DS-RP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ AA-AS-B |
+
+### Miscellaneous (Annex L.7, combinable with any one family)
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-BBMD** Broadcast Management Device | [B-BBMD-CPP](https://github.com/chipkin/BACnetProfileExample-B-BBMD-CPP) ✅ | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ NM-BBMDC-B |
+| **B-ACDC** Access Control Door Controller | [B-ACDC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACDC-CPP) ✅ | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DS-ACAD-B · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-ACCR** Access Control Credential Reader | [B-ACCR-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACCR-CPP) 📝 | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DS-COV-B · ✅ DS-ACCDI-B · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-RTR** Router | [B-RTR-CPP](https://github.com/chipkin/BACnetProfileExample-B-RTR-CPP) 📝 | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-A · ✅ DM-DOB-B · ✅ DM-LM-B · ✅ NM-RC-B |
+| **B-GW** Gateway | [B-GW-CPP](https://github.com/chipkin/BACnetProfileExample-B-GW-CPP) 📝 | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ GW-EO-B / GW-VN-B |
+| **B-DAP** Device Address Proxy | [B-DAP-CPP](https://github.com/chipkin/BACnetProfileExample-B-DAP-CPP) 📝 | ✅ DS-RP-B · ✅ DS-WP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DAB-B |
+| **B-SCHUB** BACnet/SC Hub | [B-SCHUB-CPP](https://github.com/chipkin/BACnetProfileExample-B-SCHUB-CPP) 📝 | ✅ DS-RP-B · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ NM-SCH-B |
+| **B-GENERAL** General device (Annex L.8) | *(satisfied by every example above)* | ✅ DS-RP-B · ✅ DM-DDB-B · ✅ DM-DOB-B |
+
+### Operator interfaces and workstations (Annex L.1–L.3, L.9–L.10, L.12) — client-side profiles
+
+| Profile | Example | Required BIBBs (services) |
+|---|---|---|
+| **B-OD** Operator Display | [B-OD-CPP](https://github.com/chipkin/BACnetProfileExample-B-OD-CPP) ✅ | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-V-A · ✅ DS-M-A · ✅ AE-N-A · ✅ AE-VN-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-OWS** Operator Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-V-A · ✅ DS-M-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-VM-A · ✅ AE-VN-A · ✅ SCHED-VM-A · ✅ T-V-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-MTS-A |
+| **B-AWS** Advanced Operator Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-AV-A · ✅ DS-AM-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-AVM-A · ✅ AE-AVN-A · ✅ AE-ELVM-A · ✅ SCHED-AVM-A · ✅ T-AVM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A · ✅ DM-DDA-A · ✅ NM-CC-A · ✅ AR-AVM-A |
+| **B-XAWS** Extended Advanced Operator Workstation | planned | ✅ union of B-AWS + B-AACWS + B-ALWS + B-AEWS |
+| **B-LSAP** Life Safety Annunciator Panel | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-LSV-A · ✅ AE-N-A · ✅ AE-LS-A · ✅ AE-ACK-A · ✅ AE-LSVN-A |
+| **B-LSWS** Life Safety Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-LSV-A · ✅ DS-LSM-A · ✅ AE-N-A · ✅ AE-LS-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-LSVM-A · ✅ AE-LSAVN-A · ✅ AE-ELV-A · ✅ SCHED-VM-A · ✅ T-V-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A |
+| **B-ALSWS** Advanced Life Safety Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-LSAV-A · ✅ DS-LSAM-A · ✅ AE-N-A · ✅ AE-LS-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-LSAVM-A · ✅ AE-LSAVN-A · ✅ AE-ELVM-A · ✅ SCHED-AVM-A · ✅ T-AVM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A · ✅ AR-AVM-A |
+| **B-ACSD** Access Control Security Display | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-ACV-A · ✅ DS-ACM-A · ✅ AE-N-A · ✅ AE-AC-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-ACAVN-A · ✅ AE-ELV-A · ✅ SCHED-VM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-MTS-A |
+| **B-ACWS** Access Control Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-ACAV-A · ✅ DS-ACM-A · ✅ DS-ACUC-A · ✅ AE-N-A · ✅ AE-AC-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-ACVM-A · ✅ AE-ACAVN-A · ✅ AE-ELV-A · ✅ SCHED-VM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A |
+| **B-AACWS** Advanced Access Control Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-ACAV-A · ✅ DS-ACAM-A · ✅ DS-ACUC-A · ✅ DS-ACSC-A · ✅ AE-N-A · ✅ AE-AC-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-ACAVM-A · ✅ AE-ACAVN-A · ✅ AE-ELVM-A · ✅ SCHED-AVM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A · ✅ AR-AVM-A |
+| **B-LOD** Lighting Operator Display | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-LV-A · ✅ DS-WG-A · ✅ DS-ALO-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-ALWS** Advanced Lighting Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-LAV-A · ✅ DS-LAM-A · ✅ DS-WG-A · ✅ DS-ALO-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-AVM-A · ✅ AE-AVN-A · ✅ AE-ELVM-A · ✅ SCHED-AVM-A · ✅ T-AVM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A |
+| **B-LCS** Lighting Control Station | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-LO-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B |
+| **B-ALCS** Advanced Lighting Control Station | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-WG-A · ✅ DS-ALO-A · ✅ SCHED-E-B · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B · ✅ DM-DCC-B · ✅ DM-TS-B / DM-UTC-B |
+| **B-ED** Elevator Display | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-WP-A · ✅ DS-EV-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-EVN-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-DOB-B |
+| **B-EWS** Elevator Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-COVM-A · ✅ DS-EV-A · ✅ DS-EM-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-EVM-A · ✅ AE-EAVN-A · ✅ SCHED-VM-A · ✅ T-V-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A |
+| **B-AEWS** Advanced Elevator Workstation | planned | ✅ DS-RP-A · ✅ DS-RP-B · ✅ DS-RPM-A · ✅ DS-WP-A · ✅ DS-WPM-A · ✅ DS-COVM-A · ✅ DS-EAV-A · ✅ DS-EAM-A · ✅ AE-N-A · ✅ AE-ACK-A · ✅ AE-AS-A · ✅ AE-EAVM-A · ✅ AE-EAVN-A · ✅ AE-ELVM-A · ✅ SCHED-AVM-A · ✅ T-AVM-A · ✅ DM-DDB-A · ✅ DM-DDB-B · ✅ DM-ANM-A · ✅ DM-ADM-A · ✅ DM-DOB-B · ✅ DM-DCC-A · ✅ DM-MTS-A · ✅ DM-OCD-A · ✅ DM-RD-A · ✅ DM-BR-A |
+
+Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Get the stack: <https://store.chipkin.com/services/stacks/bacnet-stack>.
+<!-- PROFILE-TABLE:END -->
+
+## Footprint
+
+Release-build sizes and start-up timing, from the latest tagged release's CI
+run (`metrics-windows.json` / `metrics-linux.json`), both built with
+`CAS_BACNET_STACK_LINK=STATIC`:
+
+<!-- METRICS -->
+| Platform | Binary | Size | SHA-256 (prefix) | Start-up to `ready` | Stack commit | Link mode | Compiler |
+|---|---|---|---|---|---|---|---|
+| — | — | not yet released | — | — | — | — | — |
 
 ## References
 

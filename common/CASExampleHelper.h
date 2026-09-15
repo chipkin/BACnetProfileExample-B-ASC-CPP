@@ -40,7 +40,7 @@ namespace CASExampleHelper {
 // version). Bump it whenever anything in common/ changes, and record the
 // change in common/CHANGELOG.md - every example in the series must then be
 // re-synced to the same common/ version.
-static const char* COMMON_VERSION = "1.5.1";
+static const char* COMMON_VERSION = "2.1.0";
 
 // Print the example's name + version, the linked CAS BACnet Stack version,
 // and the common/ helper version.
@@ -78,6 +78,20 @@ bool SetupUDP(uint16_t port);
 
 // Close the shared UDP socket.
 void ShutdownUDP();
+
+// Tell the helper which Network Port object instance owns the UDP socket.
+//
+// The stack identifies a link by the INSTANCE of its Network Port object, not
+// by a transport network type: the receive callback reports the instance a
+// datagram arrived on, the send callback is told the instance to send from, and
+// SendIAm is told which port to announce on. The helper serves one port, so it
+// needs to know its instance.
+//
+// Call this once, after BACnetStack_AddNetworkPortObject() and before
+// RegisterCommonCallbacks(). It defaults to 1 - the series convention - so an
+// example that uses instance 1 need not call it, but calling it explicitly
+// keeps main.cpp's Network Port instance the single source of truth.
+void SetNetworkPortInstance(uint32_t networkPortInstance);
 
 // Register the transport + system-time callbacks (backed by the UDP socket
 // created in SetupUDP, so call SetupUDP first).
@@ -151,11 +165,13 @@ bool RestartDue(RestartKind* outKind);
 
 // --- Keyboard input (common to every example) ------------------------------
 enum class KeyCommand {
-    None,       // nothing pressed
-    Help,       // 'h' - show version + commands
-    Quit,       // 'q' - exit
-    ArrowUp,    // up arrow
-    ArrowDown   // down arrow
+    None,        // nothing pressed
+    Help,        // 'h' - show version + commands
+    Quit,        // 'q' - exit
+    ArrowUp,     // up arrow
+    ArrowDown,   // down arrow
+    DemoAdvance  // 's' - advance a demo (e.g. a Schedule) to its next step now,
+                 //       bypassing whatever wall-clock wait it would otherwise need
 };
 
 // Non-blocking: returns a pending key command, or None if nothing was pressed.
