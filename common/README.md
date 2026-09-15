@@ -48,7 +48,7 @@ CASExampleHelper::SendIAm(g_deviceInstance);            // announce on start-up
 
 while (running) {
     BACnetStack_Tick();
-    switch (CASExampleHelper::PollKey()) { /* h / q / up / down */ }
+    switch (CASExampleHelper::PollKey()) { /* h / q / up / down / s */ }
 }
 CASExampleHelper::RestoreInput();
 ```

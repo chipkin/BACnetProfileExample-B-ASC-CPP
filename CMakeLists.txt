@@ -3,19 +3,17 @@
 #
 # This example links the CAS BACnet Stack through the CASBACnetStack::Adapter CMake
 # target (submodules/cas-bacnet-stack/adapters/cpp) and calls the stack's C API
-# (BACnetStack_*, via CASBACnetStackAdapter.h) directly - no fp* indirection, the same
-# call in every link mode. CAS_BACNET_STACK_LINK picks the mode (see below); it defaults
-# to SOURCE, which compiles every file in the stack's source/ folder straight into the
-# executable - there is no DLL/.so to build, copy, or ship first.
-#
-# NOTE: the first SOURCE-mode build compiles the entire stack (~600 source files), so it
-# takes a few minutes. Subsequent incremental builds are fast.
+# (BACnetStack_*, via CASBACnetStackAdapter.h) directly. This example builds and
+# ships in STATIC mode: CAS_BACNET_STACK_LINK=STATIC links a prebuilt
+# CASBACnetStack_x64_Release.lib / libCASBACnetStack_x64_Release.a, built first by
+# tools/build-stack-static.sh from the stack's own project files. (The adapter also
+# offers a SOURCE mode that compiles the stack's source/ straight into the
+# executable with no separate library build; this example is not built that way.)
 #
 # Build:
-#   cmake -B build -S .
-#   cmake --build build --config Release
-# Build against a prebuilt DLL/.so instead of compiling from source:
-#   cmake -B build -S . -DCAS_BACNET_STACK_LINK=DLL
+#   tools/build-stack-static.sh BACnetProfileExample-B-ASC-CPP   (from the series root)
+#   cmake -B build -S . -DCAS_BACNET_STACK_LINK=STATIC
+#   cmake --build build --config Release --parallel
 # Run (from the example folder):
 #   ./build/BACnetExampleBASC          (Linux/macOS)
 #   .\build\Release\BACnetExampleBASC.exe   (Windows)

@@ -133,10 +133,20 @@ static const uint8_t NOTIFY_TYPE_EVENT = 1;
 // -- BACnet error codes (Error_Code enumeration) ----------------------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetErrorCode.h
 //    A SetProperty* callback writes one of these to its errorCode out-parameter
-//    and returns false to reject a write with that BACnet Error-PDU.
+//    and returns false to reject a write with that BACnet Error-PDU. Since the
+//    per-property error work (CAS BACnet Stack issue #974) the GetProperty*
+//    callbacks have the same out-parameter and the same contract - see the
+//    commentary above the Get callbacks in main.cpp for when to use it.
+static const uint32_t ERROR_CODE_READ_ACCESS_DENIED = 27;
 static const uint32_t ERROR_CODE_PASSWORD_FAILURE = 26;
+static const uint32_t ERROR_CODE_UNKNOWN_PROPERTY = 32;
 static const uint32_t ERROR_CODE_VALUE_OUT_OF_RANGE = 37;
+static const uint32_t ERROR_CODE_INVALID_ARRAY_INDEX = 42;
 static const uint32_t ERROR_CODE_OPTIONAL_FUNCTIONALITY_NOT_SUPPORTED = 45;
+// success (84) is what errorCode is PRESET to before a Get/Set callback runs.
+// Leaving it at success on a false return means "I decline, but I am not
+// naming an error" - see main.cpp.
+static const uint32_t ERROR_CODE_SUCCESS = 84;
 
 // -- Transport network type (BACnetPacket::NetworkType, for the send/receive
 //    callbacks and SendIAm).
