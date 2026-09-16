@@ -382,7 +382,7 @@ Expected output:
 ```
 BACnet B-ASC (Application Specific Controller) Example - C++ v1.2.0
 CAS BACnet Stack version: 6.0.21.0
-Common helper (common/) version: 2.1.0
+Common helper (common/) version: 2.5.0
 FYI: Listening for BACnet/IP on UDP port 47808.
 TX 21 bytes to 192.168.3.255:47808 (broadcast)
 FYI: Device 389003 ("Rainbow") ready. Vendor ID 389. Press 'h' for help.
