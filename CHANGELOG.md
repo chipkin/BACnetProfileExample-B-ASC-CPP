@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed — documentation restructure, SOURCE link
+
+- **README.md cut down to this example only.** Removed the series "start
+  here" framing, the generic device-profile explainer, the "What the profile
+  requires" prose (the BIBBs table already said this), "Before you ship" (its
+  per-field guidance moved into code comments in `main.cpp`, see below), "Get
+  the code", "Link mode", "Troubleshooting", "Extending the example", and
+  "Objects and properties" (now generated into `docs/PICS.md` instead).
+  Added a prebuilt-binary release link and pointers to the two new documents
+  near the top.
+- **`TUTORIAL.md` added** - the extending/reviewing material that used to
+  bloat the README: the "Add a second analog input" silent-failure walk-through,
+  what each object type (including the three commandable outputs) needs the
+  app to serve, a Served-by breakdown for both a plain object (Analog Input 1)
+  and a commandable one (Analog Output 1), the DeviceCommunicationControl
+  `*errorCode` contract, "Reviewing your device", "Using this example as the
+  base for a real product" (what to copy out of `common/`, calling
+  `BACnetStack_Tick()` correctly), and Troubleshooting.
+- **`docs/PICS.md` added** - an ANSI/ASHRAE 135 Annex A format Protocol
+  Implementation Conformance Statement, with the objects-and-properties table
+  generated from `docs/objects.json` (`tools/gen-objects-properties.py`,
+  zero ⚠ rows).
+- **`docs/objects.json`'s Device entry gained a `stack` list** separate from
+  `accepted`, matching the shape the rest of the series uses: `Object_List`,
+  `Protocol_Version`, `Protocol_Revision`, `Protocol_Services_Supported`,
+  `Protocol_Object_Types_Supported` and `Device_Address_Binding` are
+  device-wide facts the stack computes (rendered as plain `stack`, not `stack
+  default, accepted`); `accepted` now holds only the stack's configured
+  defaults this example does not override (`System_Status`,
+  `Max_APDU_Length_Accepted`, `Segmentation_Supported`, `APDU_Timeout`,
+  `Number_Of_APDU_Retries`, `Database_Revision`).
+- **Build switched from a prebuilt STATIC library to the adapter's default
+  SOURCE mode**: `cmake -B build -S .` / `cmake --build build --config
+  Release` compiles the stack straight into the executable, with no
+  `tools/build-stack-static.sh` pre-step and no `-DCAS_BACNET_STACK_LINK=...`
+  flag. `CMakeLists.txt`'s header comment, `AGENTS.md`, and
+  `.github/workflows/release.yml` (drops the static-library cache/build steps
+  and the matrix `lib:` entries, asserts `CAS_BACNET_STACK_LINK=SOURCE`, sets
+  `"link_mode": "SOURCE"` in the published metrics JSON, and packages
+  `TUTORIAL.md` / `docs/PICS.md` alongside the binaries) now match.
+- **`main.cpp`'s `CHANGE ALL OF THIS BEFORE YOU SHIP` block absorbed the
+  README's "Before you ship" table** as per-field comments, including the
+  `DEVICE_NAME` internetwork-uniqueness warning and the DCC password
+  plaintext-on-the-wire note.
+- **Footprint table left as-is with a refresh note added**: the published
+  v1.2.0 numbers were measured from a STATIC-linked binary; the next release
+  refreshes them from the SOURCE-mode build now documented.
+- Corrected the README's "Expected output" sample, which had dropped the
+  `(Network Port 1)` suffix the binary actually prints on the `Listening for
+  BACnet/IP` and start-up `TX` lines.
+
 ## [1.2.0] - 2026-09-15
 
 ### Changed — STATIC link, generated README blocks
