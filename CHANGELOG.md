@@ -176,8 +176,8 @@ password with `password-failure`.
   v1.3.0 against a v1.5.0 tree — in a project whose own docs teach "the printed
   versions are how you detect drift"); the BIBB `-A`/`-B` suffix convention,
   `Protocol_Revision`, BACnet/SC and "BACnet internetwork" are now defined at
-  first use; the Verify section names free clients (YABE, Wireshark) alongside
-  the commercial one; and two new sections cover what in `common/` is demo-only
+  first use; the Verify section is clearer about what to check; and two new
+  sections cover what in `common/` is demo-only
   versus production-worthy, and the `BACnetStack_Tick()` cadence and
   single-threading contract.
 - **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
