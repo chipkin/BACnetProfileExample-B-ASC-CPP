@@ -5,7 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - unreleased
+
+### Fixed
+
+- **`Application_Software_Version` (12) and `Firmware_Revision` (44) were
+  hardcoded and stale** - both properties were served from `static const
+  char*` constants (`APPLICATION_SOFTWARE_VERSION` / `FIRMWARE_REVISION`)
+  literally set to `"1.0.0"` in the `CHANGE ALL OF THIS BEFORE YOU SHIP`
+  block, unrelated to `APP_VERSION` ("1.2.1") or the linked CAS BACnet Stack
+  (6.0.21.0) and never updated across releases. Fixed: `Application_Software_
+  Version` now reads `APP_VERSION` directly (one source of truth, can't drift
+  from `--version`'s own banner again) and the separate stale constant is
+  gone. `Firmware_Revision` is now built at runtime from the CAS BACnet
+  Stack's own `BACnetStack_GetAPIMajorVersion()`/`GetAPIMinorVersion()`/
+  `GetAPIPatchVersion()`/`GetAPIBuildVersion()` (the same 4 calls
+  `common/CASExampleHelper.cpp`'s `PrintVersion()` already uses for the
+  startup banner) into `static std::string g_firmwareRevision`, populated
+  once right after `LoadBACnetFunctions()` succeeds in `main()` (these
+  getters need the stack loaded first). Verified with a clean SOURCE-mode
+  Release build and `--version`, which reports `CAS BACnet Stack version:
+  6.0.21.0` via the same 4 getters `g_firmwareRevision` now uses - a live
+  ReadProperty against the running device was attempted with `bacpypes3`
+  but did not get a response in a reasonable time, so this fix is verified
+  by build + code review rather than an on-the-wire read.
 
 ### Changed — documentation restructure, SOURCE link
 
