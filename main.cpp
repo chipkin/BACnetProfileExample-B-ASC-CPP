@@ -25,7 +25,7 @@
 // three commandable outputs a client drives with WriteProperty. Each object has a
 // colour name (the convention shared across this example series):
 //
-//     Device 389003            "Rainbow"     (instance configurable with --deviceID)
+//     Device 389003            "Chipkin Example B-ASC"     (instance configurable with --deviceID)
 //     Analog Input  1          "Bronze"      (REAL, degrees Celsius; read-only)
 //     Binary Input  1          "Emerald"     (active / inactive; read-only)
 //     Multi-State Input 1      "Hot Pink"    (state 1..3; read-only)
@@ -79,7 +79,7 @@ using namespace CASBACnetStackExampleConstants;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-ASC (Application Specific Controller) Example - C++";
-static const char* APP_VERSION = "1.2.1";
+static const char* APP_VERSION = "1.2.2";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
 // to 389003 and can be overridden on the command line with --deviceID.
@@ -108,10 +108,10 @@ static const uint32_t VENDOR_IDENTIFIER = 389;
 // whole BACnet internetwork, and here it is a COMPILE-TIME constant. The device
 // instance is runtime-configurable via --deviceID, so it is easy to ship two
 // units, configure their instances correctly, and still have BOTH announce
-// Object_Name "Rainbow" - a spec violation, and a hard BTL failure. In a real
+// Object_Name "Chipkin Example B-ASC" - a spec violation, and a hard BTL failure. In a real
 // product Object_Name must be per-unit configurable too: derive it from a serial
 // number, DIP switches, a config file, or add a --deviceName argument.
-static const char* DEVICE_NAME = "Rainbow";
+static const char* DEVICE_NAME = "Chipkin Example B-ASC";
 
 // The Device object's Description. Change it to what YOUR device actually is;
 // this string describes this tutorial.
