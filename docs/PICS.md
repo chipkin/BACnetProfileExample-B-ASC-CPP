@@ -18,10 +18,10 @@ see [README.md](../README.md).
 | **Vendor Identifier** | 389 |
 | **Product Name** | CAS BACnet Stack Example - B-ASC |
 | **Product Model Number** | CAS BACnet Stack Example - B-ASC |
-| **Application Software Version** | 1.0.0 |
-| **Firmware Revision** | 1.0.0 |
+| **Application Software Version** | 1.3.0 |
+| **Firmware Revision** | 6.0.23.0 (the CAS BACnet Stack version) |
 | **BACnet Protocol Version** | 1 |
-| **BACnet Protocol Revision** | 24 |
+| **BACnet Protocol Revision** | 30 |
 
 **Product Description:** a BACnet/IP Application Specific Controller built on
 the CAS BACnet Stack. It presents three read-only sensor objects (Analog
@@ -75,17 +75,25 @@ boundary, not a limitation to work around.
 ### DeviceCommunicationControl
 
 The device accepts `enable` and `disable-initiation`. The deprecated plain
-`disable` value is **rejected** with `service-request-denied` - required at
-Protocol_Revision >= 20 (this device is at revision 24). An optional
-password (`DCC_PASSWORD` in `main.cpp`, empty/unset by default so any
-request is accepted) is compared length-first-then-bytes; a mismatch is
-rejected with `password-failure` (Error Class = SECURITY).
+`disable` value is **rejected** with `service-request-denied` (135-2024 clause
+16.1.2; this device is at Protocol_Revision 30). An optional password (none by
+default, so any request is accepted; set with `--dcc-password <string>`) is
+compared length-first-then-bytes; a missing or wrong one is rejected with
+`password-failure` (Error Class = SECURITY). The device initiates nothing after
+its start-up I-Am, so `disable-initiation` changes nothing observable.
 
 ## 5. Segmentation capability
 
-Segmentation is **not supported** in either direction
-(`Segmentation_Supported` = `no-segmentation`). `Max_APDU_Length_Accepted` is
-1476 octets, the BACnet/IP maximum.
+Segmentation is **supported in both directions**
+(`Segmentation_Supported` = `segmented-both`), by the stack: at `6.x` @
+`64b2cfac5` the customer build compiles `STACK_OPTION_SEGMENTATION` in (stack
+#2992), and this example keeps the stack's defaults - `Max_Segments_Accepted`
+16 and `APDU_Segment_Timeout` 5000 ms. Table 12-13 footnote 1: "These
+properties are required if, and shall be present only if, segmentation of any
+kind is supported" - they are not rows in section 11 because its generator lists
+only unconditionally required properties. `Max_APDU_Length_Accepted` is 1476
+octets, the BACnet/IP maximum. (At the previous pin, `abd4cee1`, this example
+answered `no-segmentation`.)
 
 ## 6. Standard object types supported
 
@@ -114,6 +122,12 @@ time with `--port`.
 
 BBMD is not supported, Foreign Device registration is not supported, and
 BACnet/SC, MS/TP, Ethernet (Annex H) and PTP are not supported.
+
+The stack's Network Port object still lists its BACnet/IP properties in
+`Property_List` - including `IP_DNS_Server`, `FD_BBMD_Address` and
+`FD_Subscription_Lifetime` - and every one of them reads as a value
+(`FD_BBMD_Address` is a Null host, port 0: no BBMD configured). The Wire Tests
+read every listed property of every object.
 
 ## 8. Device address binding
 
@@ -155,7 +169,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Protocol_Object_Types_Supported | BACnetObjectTypesSupported | stack | no |
 | Object_List | BACnetARRAY[N] of BACnetObjectIdentifier | stack | no |
 | Max_APDU_Length_Accepted | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_MAX_APDU_LENGTH_ACCEPTED`) | no |
-| Segmentation_Supported | BACnetSegmentation | stack default, accepted (`BACnetSegmentation::noSegmentation`) | no |
+| Segmentation_Supported | BACnetSegmentation | stack default, accepted (`BACnetSegmentation::segmentedBoth` with `STACK_OPTION_SEGME) | no |
 | APDU_Timeout | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_APDU_TIMEOUT`) | no |
 | Number_Of_APDU_Retries | Unsigned | stack default, accepted (`CAS_BACNET_DEVICE_DEFAULT_NUMBER_OF_APDU_RETRIES`) | no |
 | Device_Address_Binding | BACnetLIST of BACnetAddressBinding | stack | no |

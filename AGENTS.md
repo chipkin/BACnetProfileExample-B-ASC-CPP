@@ -28,6 +28,8 @@ This repository is self-contained:
   hand-edit between the `OBJECTS-PROPERTIES` markers.
 - `docs/objects.json` - the input to that generator. Update it in the same change
   as any `main.cpp` change that adds an object or a `GetProperty*` branch.
+- `tests/` - the Wire Tests (Python, standard library only); `wiretest/` - the
+  series' shared harness they use (vendored, like `common/`; do not edit here).
 - `submodules/cas-bacnet-stack/` - the **CAS BACnet Stack** as a git submodule
   (private; compiled from source). After cloning, run
   `git submodule update --init --recursive`.
@@ -67,14 +69,15 @@ Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1
 
 - Device is named "Chipkin Example B-ASC"; objects use the series' colour names; vendor id 389.
 - Implement **only** the services and objects the B-ASC profile requires - but
-  expose **every required property** of each object for Protocol_Revision 24.
+  expose **every required property** of each object for Protocol_Revision 30.
 - Outputs are **commandable**: store the 16-slot `Priority_Array` +
   `Relinquish_Default` in the app (the `Commandable` struct); let the stack
   resolve `Present_Value`. Writes land via the `SetProperty*` callbacks (value)
   and `SetPropertyNull` (relinquish).
 - DeviceCommunicationControl (DM-DCC-B): the stack runs the enable/disable state
-  machine; the `DeviceCommunicationControl` callback just validates `DCC_PASSWORD`
-  and logs. The deprecated plain `disable` (1) is rejected by the stack at
+  machine; the `DeviceCommunicationControl` callback just validates the password
+  (`g_dccPassword`, from `--dcc-password`) and logs. The example initiates nothing
+  after its start-up I-Am, so `disable-initiation` has no visible effect. The deprecated plain `disable` (1) is rejected by the stack at
   Protocol_Revision >= 20 - only `enable` (0) and `disable-initiation` (2) apply.
   This callback has no fallback error code: it must set `*errorCode` on every
   `false` return.
@@ -91,20 +94,23 @@ Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1
 
 ## How to verify a change
 
-There are no unit tests; verification is behavioural:
+The Wire Tests in `tests/` automate the discovery half of this (README "Wire
+Tests"): `python3 tests/run_wire_tests.py --exe build/BACnetExampleBASC`. Run them
+after any change. Beyond them, verification is behavioural:
 
 1. Build, then run one instance on a clear UDP port.
 2. With a BACnet client (e.g. the CAS BACnet Explorer), send **Who-Is** and
    confirm **I-Am** from the device instance.
 3. **ReadProperty** every required property of every object and confirm the
-   values; confirm `Protocol_Revision` is 24 and `Object_List` lists all objects.
+   values; confirm `Protocol_Revision` is 30 and `Object_List` lists all objects.
 4. **WriteProperty** a commandable output's `Present_Value` at a priority, re-read
    it (and its `Priority_Array`), then write NULL to relinquish and confirm it
    falls back to `Relinquish_Default`. Confirm a write to a read-only input is
    rejected.
 5. **DeviceCommunicationControl**: confirm `disable-initiation` and `enable`
    SimpleACK, the deprecated `disable` is rejected (service-request-denied), and a
-   wrong password (if `DCC_PASSWORD` is set) is rejected (password-failure).
+   wrong password (start with `--dcc-password <string>`) is rejected
+   (password-failure).
 6. If you changed the objects or their properties, regenerate `docs/PICS.md`
    (`python tools/gen-objects-properties.py BACnetProfileExample-B-ASC-CPP` from
    the series root) and confirm no row comes out flagged with ⚠.

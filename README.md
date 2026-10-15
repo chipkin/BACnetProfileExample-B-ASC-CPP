@@ -15,9 +15,9 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 - **[docs/PICS.md](docs/PICS.md)** - the Protocol Implementation Conformance
   Statement: every object, every property, and who answers it.
 
-> **Versions:** this document describes **example v1.2.0**, built and verified
-> against **CAS BACnet Stack 6.0.21** (`6.x` @ `abd4cee1`), at
-> **Protocol_Revision 24**, with the vendored `common/` helper at **v2.5.0**.
+> **Versions:** this document describes **example v1.3.0**, built and verified
+> against **CAS BACnet Stack 6.0.23** (`6.x` @ `64b2cfac5`), at
+> **Protocol_Revision 30**, with the vendored `common/` helper at **v3.3.0**.
 > Running the example prints all three - if what it prints disagrees with this
 > line, trust the program and check `CHANGELOG.md`.
 >
@@ -45,11 +45,11 @@ Concretely, the callback:
 
 1. Rejects a request for any device instance other than this one, naming
    `optional-functionality-not-supported` on the wire.
-2. Compares the supplied password to `DCC_PASSWORD` by **length first, then
-   bytes** - never `strcmp`, because a BACnet CharacterString may legitimately
-   contain an embedded NUL that `strcmp` would silently stop at. A device with
-   no configured password (`DCC_PASSWORD == ""`, the shipped default) accepts
-   any request. A mismatch is rejected with `*errorCode =
+2. Compares the supplied password to the configured one (`g_dccPassword`, set
+   with `--dcc-password`) by **length first, then bytes** - never `strcmp`,
+   because a BACnet CharacterString may legitimately contain an embedded NUL
+   that `strcmp` would silently stop at. A device with no configured password
+   (the shipped default) accepts any request. A mismatch is rejected with `*errorCode =
    ERROR_CODE_PASSWORD_FAILURE`, which the stack pairs with `Error Class =
    SECURITY` (clause 16.1.1.3.1).
 3. On a correct (or absent) password, accepts and logs the requested action -
@@ -65,17 +65,26 @@ Concretely, the callback:
    that.
 
 > **Protocol_Revision >= 20 note:** the plain **`disable`** value (stop initiating
-> *and* responding) is **deprecated**. At Protocol_Revision 24 the stack rejects it
-> with `service-request-denied`; the modern choice is **`disable-initiation`** (the
-> device keeps answering reads but stops initiating). So in practice only
-> `enable` and `disable-initiation` take effect - the example demonstrates exactly
-> this, and its callback still logs what the client asked for even on that
-> deprecated path, since the rejection happens in the stack after the callback
-> returns.
+> *and* responding) is **deprecated**. At Protocol_Revision 30 the stack rejects it
+> with `service-request-denied`, as 135-2024 clause 16.1.2 requires ("If the
+> request is valid and the 'Enable/Disable' parameter is the deprecated value
+> DISABLE, the request shall be ignored..."). The modern choice is
+> **`disable-initiation`**. So only `enable` and `disable-initiation` take
+> effect. The callback still logs what the client asked for on the deprecated
+> path, because the rejection happens in the stack after the callback returns.
 
-The example ships with **no password** (`DCC_PASSWORD = ""`, accept any request).
-Set it to your device's secret to require one; a mismatch is rejected with
-`password-failure`.
+**What you can observe today, and what you cannot.** The password check and the
+SimpleACK / Error answers are on the wire. The *effect* of `disable-initiation`
+is not: clause 16.1.2 stops a device initiating messages *other than* I-Am and
+I-Have sent in answer to Who-Is and Who-Has, and this example initiates nothing
+after its start-up I-Am. So after a `disable-initiation` it behaves exactly as
+before. The stack holds the communication state; the example has no periodic
+request of its own that you could watch stop.
+
+The example ships with **no password** (accept any request). Start it with
+`--dcc-password <string>` to require one; a missing or wrong password is then
+rejected with `Error Class = SECURITY`, `Error Code = password-failure`. In your
+product, set the password from your own configuration.
 
 ## The device this example creates
 
@@ -166,6 +175,8 @@ This is a **self-contained** project. It ships:
 - `common/` - the shared helper (UDP, callbacks, CLI, keyboard) vendored in.
 - `CMakeLists.txt` - the build, the same on Windows, Linux, and macOS.
 - `docs/PICS.md` - the conformance statement.
+- `tests/` - the Wire Tests (see [Wire Tests](#wire-tests)), and `wiretest/`, the
+  series' shared Python harness they are written against (vendored, like `common/`).
 - `submodules/cas-bacnet-stack/` - the **CAS BACnet Stack as a git submodule**
   (private; requires a license - see above). Its sources are compiled into the
   executable, so there is no library or DLL to build, ship, or install.
@@ -223,11 +234,11 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-ASC (Application Specific Controller) Example - C++ v1.2.0
-CAS BACnet Stack version: 6.0.21.0
-Common helper (common/) version: 2.5.0
+BACnet B-ASC (Application Specific Controller) Example - C++ v1.3.0
+CAS BACnet Stack version: 6.0.23.0
+Common helper (common/) version: 3.3.0
 FYI: Listening for BACnet/IP on UDP port 47808 (Network Port 1).
-TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1)
+TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1) - Unconfirmed: I-Am
 FYI: Device 389003 ("Chipkin Example B-ASC") ready. Vendor ID 389. Press 'h' for help.
 ```
 
@@ -254,6 +265,7 @@ firewall. To use a different port, pass `--port` (see below).
 |--------|---------|---------|
 | `--port <n>` | `47808` | UDP port to listen on (BACnet/IP). |
 | `--deviceID <n>` | `389003` | The device's BACnet instance number (BACnet requires this to be configurable). |
+| `--dcc-password <string>` | none | Require this password on DeviceCommunicationControl. Prints `FYI: DeviceCommunicationControl requires a password` at start-up (never the password). |
 | `--help`, `-h` | - | Show usage and exit. |
 | `--version` | - | Print the example, stack, and `common/` helper versions, then exit. |
 
@@ -282,7 +294,7 @@ Use a BACnet client such as the
    (`Chipkin Example B-ASC`), three inputs, three outputs, and the Network Port
    (`Vermilion`). Reading the Device's `Object_List` returns all eight.
 3. **Read the Device** - ReadProperty `389003` -> `Object_Name` returns
-   `"Chipkin Example B-ASC"`; `Protocol_Revision` returns `24`; `Description` returns the
+   `"Chipkin Example B-ASC"`; `Protocol_Revision` returns `30`; `Description` returns the
    profile description string.
 4. **Read a sensor** - ReadProperty Analog Input `1` -> `Present_Value` returns
    `21.5`; `Units` returns `degrees-Celsius`. Repeat for Binary Input `1`
@@ -293,20 +305,42 @@ Use a BACnet client such as the
    `20.0` (its `Relinquish_Default`). Repeat for Binary/Multi-State Output. A write
    to a read-only *input*, or an out-of-range value, is rejected.
 6. **Communication control (the B-ASC test)** - send a **DeviceCommunicationControl**
-   with `disable-initiation`: the device SimpleACKs and keeps answering reads but
-   stops initiating. Send `enable` to resume. (Sending the deprecated plain
-   `disable` returns `service-request-denied` at Protocol_Revision 24 - that is
-   correct.) If you set `DCC_PASSWORD`, a request with the wrong password is
-   rejected with `password-failure`.
+   with `disable-initiation`: the device SimpleACKs and keeps answering reads.
+   (It initiates nothing after start-up, so there is nothing visible to stop -
+   see [DeviceCommunicationControl](#devicecommunicationcontrol-the-b-asc-addition).)
+   Send `enable` to resume. Sending the deprecated plain `disable` returns
+   `service-request-denied` at Protocol_Revision 30 - that is correct. Restart
+   the example with `--dcc-password s3cret`: a request with no password or the
+   wrong one is rejected with `security` / `password-failure`, and one with
+   `s3cret` is SimpleACKed.
 
 For a property-by-property review against the conformance statement, see
 [TUTORIAL.md](TUTORIAL.md).
+
+## Wire Tests
+
+The discovery half of the checks above, automated: a Python BACnet client drives
+the running example over BACnet/IP from outside it, the way a client discovers a
+device - Who-Is, the Device's `Object_List`, then for every object its
+`Property_List` and a ReadProperty of every property it lists. Every read must
+come back as a value; an Error, Reject or Abort fails the run. Python 3 standard
+library only:
+
+```bash
+python3 tests/run_wire_tests.py --exe build/BACnetExampleBASC          # Linux/macOS
+python tests\run_wire_tests.py --exe build\Release\BACnetExampleBASC.exe   # Windows
+```
+
+It ends with `ALL WIRE TESTS PASSED` (exit 0). CI runs it on Linux after the
+smoke test. [tests/README.md](tests/README.md) says what each check proves. It
+does not yet test commanding the outputs (step 5) or DeviceCommunicationControl
+(step 6).
 
 
 ## The BACnet profile example series
 
 <!-- PROFILE-TABLE:BEGIN (generated from cas-bacnet-stack-examples/docs/profile-table.md - do not edit here) -->
-The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-2024 Annex L, and there is one example repository per profile. Pick the profile your device claims, then the language you build in. "Ask" means the example hasn't been built yet for that language - [contact Chipkin](https://store.chipkin.com/contact-us) if you need one.
+There is one example repository per standardized device profile in ASHRAE 135-2024 Annex L. An example marked ⛔ is blocked: the stack cannot yet perform that profile's function through its customer interface, and the example's README says what it does today. Pick the profile your device claims, then the language you build in. "Ask" means the example hasn't been built yet for that language - [contact Chipkin](https://store.chipkin.com/contact-us) if you need one.
 
 ### Controllers (Annex L.4)
 
@@ -351,7 +385,7 @@ The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-20
 
 | Profile | C++ | Node.js | C# | Rust | Python | Go |
 |---|---|---|---|---|---|---|
-| **B-AS** Authorization Server | [B-AS-CPP](https://github.com/chipkin/BACnetProfileExample-B-AS-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-AS** Authorization Server | [B-AS-CPP](https://github.com/chipkin/BACnetProfileExample-B-AS-CPP) ⛔ blocked on [stack #2043](https://github.com/chipkin/cas-bacnet-stack/issues/2043) | Ask | Ask | Ask | Ask | Ask |
 
 ### Miscellaneous (Annex L.7, combinable with any one family)
 
@@ -359,10 +393,10 @@ The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-20
 |---|---|---|---|---|---|---|
 | **B-BBMD** Broadcast Management Device | [B-BBMD-CPP](https://github.com/chipkin/BACnetProfileExample-B-BBMD-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-ACDC** Access Control Door Controller | [B-ACDC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACDC-CPP) | Ask | Ask | Ask | Ask | Ask |
-| **B-ACCR** Access Control Credential Reader | [B-ACCR-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACCR-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-ACCR** Access Control Credential Reader | [B-ACCR-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACCR-CPP) ⛔ blocked on [stack #3934](https://github.com/chipkin/cas-bacnet-stack/issues/3934) | Ask | Ask | Ask | Ask | Ask |
 | **B-RTR** Router | [B-RTR-CPP](https://github.com/chipkin/BACnetProfileExample-B-RTR-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-GW** Gateway | [B-GW-CPP](https://github.com/chipkin/BACnetProfileExample-B-GW-CPP) | Ask | Ask | Ask | Ask | Ask |
-| **B-DAP** Device Address Proxy | [B-DAP-CPP](https://github.com/chipkin/BACnetProfileExample-B-DAP-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-DAP** Device Address Proxy | [B-DAP-CPP](https://github.com/chipkin/BACnetProfileExample-B-DAP-CPP) ⛔ blocked on [stack #2032](https://github.com/chipkin/cas-bacnet-stack/issues/2032) | Ask | Ask | Ask | Ask | Ask |
 | **B-SCHUB** BACnet/SC Hub | [B-SCHUB-CPP](https://github.com/chipkin/BACnetProfileExample-B-SCHUB-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-GENERAL** General device (Annex L.8) | *(satisfied by every example above)* | — | — | — | — | — |
 
@@ -390,7 +424,7 @@ Client-side profiles.
 | **B-EWS** Elevator Workstation | planned | — | — | — | — | — |
 | **B-AEWS** Advanced Elevator Workstation | planned | — | — | — | — | — |
 
-🚧 = in progress. "Ask" = not yet built for that language; contact Chipkin if you need it. Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Get the stack: <https://store.chipkin.com/services/stacks/bacnet-stack>.
+🚧 = in progress. ⛔ = Blocked Example (blocked on the named stack gap). "Ask" = not yet built for that language; contact Chipkin if you need it. Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Get the stack: <https://store.chipkin.com/services/stacks/bacnet-stack>.
 <!-- PROFILE-TABLE:END -->
 
 ## References

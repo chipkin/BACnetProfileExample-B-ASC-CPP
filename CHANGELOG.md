@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - unreleased
+
+### Fixed
+
+- **`--dcc-password` was advertised but ignored.** `--help` (from `common/`)
+  listed `--dcc-password <string>`, but `main.cpp` never read it and compared
+  against a compile-time empty `DCC_PASSWORD`, so the password Failure Mode
+  needed a recompile. `main.cpp` now reads it with
+  `CASExampleHelper::ParseDccPasswordArg()` into `g_dccPassword` (default empty,
+  `DEFAULT_DCC_PASSWORD`) and prints `FYI: DeviceCommunicationControl requires a
+  password (--dcc-password).` at start-up when one is set (never the password).
+  Checked on the wire at the new pin (Windows): with `--dcc-password s3cret`, a
+  `disable-initiation` with the wrong password or none gets Error class 4 code 26
+  (`security` / `password-failure`), with `s3cret` a SimpleACK; the deprecated
+  `disable` gets Error class 5 code 29 (`services` / `service-request-denied`);
+  with no `--dcc-password`, any password is SimpleACKed.
+- **README said the example "demonstrates exactly" disable-initiation** ("keeps
+  answering reads but stops initiating"). The example initiates nothing after
+  its start-up I-Am, and 135-2024 clause 16.1.2 still lets a device send I-Am /
+  I-Have in answer to Who-Is / Who-Has, so nothing observable changes. README,
+  PICS and AGENTS.md now say so.
+
+### Changed
+
+- **Stack Pin moved to `6.x` @ `64b2cfac5` (CAS BACnet Stack 6.0.23)** from
+  `6.x` @ `abd4cee1` (6.0.21), per the series rule that a pin moves to the latest
+  `6.x` whenever an example is updated. No API change needed.
+- **`common/` 3.0.0 -> 3.3.0**, copied verbatim from B-SS-CPP `b640a81`. Additive
+  for this example: four new keys it does not handle (`k`, `o`, `f`, `p` are
+  ignored) and `HelperSendMessage` now sends a broadcast the stack hands it with
+  no address.
+- **Protocol_Revision 24 -> 30** (the stack's default at the new pin): README,
+  AGENTS.md, PICS, `main.cpp` comments. The deprecated-`disable` rejection is
+  unchanged at 30.
+- **Segmentation is now supported** (`segmented-both`, `Max_Segments_Accepted`
+  16, `APDU_Segment_Timeout` 5000 ms): the stack's customer build compiles
+  segmentation in from this pin (stack #2992). `docs/PICS.md` section 5 updated;
+  section 11 regenerated.
+- README, PICS and version lines: stack 6.0.23, `common/` 3.3.0,
+  Protocol_Revision 30, example 1.3.0 (the README still said 1.2.0 and
+  `common/` 2.5.0). Sample output shows the `- Unconfirmed: I-Am` suffix
+  `common/` prints. Series profile table re-synced. APP_VERSION 1.2.2 -> 1.3.0
+  (minor: `--dcc-password` changes behaviour).
+
+### Added
+
+- **Wire Tests** (`tests/`, README "Wire Tests"): `tests/discovery_test.py`
+  (copied from B-SS-CPP `da3e96f`, object list adapted) does what a client's
+  discovery does - Who-Is, the Device's `Object_List` (control: exactly the eight
+  objects), then every object's `Property_List` and a ReadProperty of every listed
+  property - and fails on any Error, Reject, Abort or silence.
+  `tests/run_wire_tests.py` runs it; CI runs it on Linux after the smoke test.
+  Passes 14/14 (114 reads) on Windows and Linux at the new pin.
+- `wiretest/` 0.5.0, the series' shared Wiretest Harness, vendored verbatim
+  from B-BBMD-CPP.
+
 ## [1.2.2] - unreleased
 
 ### Changed
