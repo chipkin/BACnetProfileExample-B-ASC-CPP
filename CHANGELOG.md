@@ -45,6 +45,7 @@ DS-WP-B, DM-DDB-B, DM-DOB-B, DM-DCC-B; the same eight objects).
   reporting a fault, initiating under DCC; PICS: the Analog Output optional
   properties, I-Am initiation, the objects' notes, Application_Software_Version
   1.4.0.
+- Wire Tests use the shared `wiretest/` 0.7.0: the Peer is `wiretest.Client(retries=3, timeout=0.6)`; `dcc_test.py`'s heartbeat counter, DeviceCommunicationControl call and Who-Is are `wiretest.IAmBroadcasts`, `Client.device_communication_control` and `Client.who_is`.
 
 ## [1.3.0] - unreleased
 

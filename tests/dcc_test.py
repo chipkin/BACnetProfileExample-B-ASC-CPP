@@ -34,10 +34,8 @@ The heartbeat is a subnet broadcast. On Linux/macOS the test hears it on the wir
 (common/ binds it SO_EXCLUSIVEADDRUSE), so there - and on every platform as a second
 witness - the test counts the example's own "TX ... (broadcast) ... I-Am" console
 lines, which common/ prints for each datagram it actually sends and never for one the
-stack refused.
+stack refused. wiretest.IAmBroadcasts does both counts.
 """
-import os
-import re
 import sys
 import time
 
@@ -52,43 +50,7 @@ RUNNING_WATCH = 11.0       # long enough for at least two heartbeats
 SILENT_WATCH = 11.0        # two heartbeat periods with none
 ERROR_CLASS_SECURITY, ERROR_CODE_PASSWORD_FAILURE = 4, 26
 ERROR_CLASS_SERVICES, ERROR_CODE_SERVICE_REQUEST_DENIED = 5, 29
-DCC_DISABLE = 1            # deprecated (cl. 16.1.1.1.2); refused at Protocol_Revision >= 20
-
-
-class Heartbeats:
-    """Counts the controller's unsolicited I-Am broadcasts from a mark onwards: on the wire
-    (Linux/macOS) and in its console's TX lines (every platform)."""
-
-    def __init__(self, example, port):
-        self.example = example
-        self.console_line = re.compile(rf"TX \d+ bytes to [\d.]+:{port} \(broadcast\)[^\n]*I-Am")
-        broadcast_ip = wiretest.broadcast_address(example.output(), port)
-        self.listener = wiretest.broadcast_listener(broadcast_ip, port) if os.name != "nt" and broadcast_ip else None
-        self.mark()
-
-    def mark(self):
-        self.console_offset = len(self.example.output())
-        if self.listener is not None:
-            self.listener.clear()
-
-    def counts(self):
-        """(on the wire or None on Windows, in the console) since the mark."""
-        console = len(self.console_line.findall(self.example.output()[self.console_offset:]))
-        if self.listener is None:
-            return None, console
-        self.listener.collect(0.05)
-        wire = sum(1 for frame in self.listener.frames
-                   if wiretest.i_am_device_instance(frame.payload) == setup.DEVICE_INSTANCE)
-        return wire, console
-
-    def watch(self, seconds):
-        self.mark()
-        time.sleep(seconds)
-        return self.counts()
-
-    def close(self):
-        if self.listener is not None:
-            self.listener.close()
+DCC_DISABLE = alarm.DCC_DISABLE    # deprecated (cl. 16.1.1.1.2); refused at Protocol_Revision >= 20
 
 
 def running(counts, at_least):
@@ -107,20 +69,12 @@ def text(counts):
 
 
 def dcc(client, port, enable_disable, password=None, minutes=None):
-    return client.request(lambda invoke_id: alarm.device_communication_control_request(
-        invoke_id, enable_disable, password, minutes), port, timeout=setup.REQUEST_TIMEOUT)
+    return client.device_communication_control(port, enable_disable, password, minutes)
 
 
 def who_is_answered(client, port):
     """A unicast Who-Is for this device gets its I-Am back (sent up to 3 times, visibly)."""
-    for attempt in range(3):
-        if attempt:
-            print("[RETRY] Who-Is got no I-Am in 1.0 s - sent again", flush=True)
-        client.frames.clear()
-        client.send(wiretest.bvlc(wiretest.npdu(wiretest.who_is(setup.DEVICE_INSTANCE, setup.DEVICE_INSTANCE))), port)
-        if client.wait_for(lambda frame: wiretest.i_am_device_instance(frame.payload) == setup.DEVICE_INSTANCE, 1.0):
-            return True
-    return False
+    return client.who_is(port, setup.DEVICE_INSTANCE, attempts=3, timeout=1.0) is not None
 
 
 def main():
@@ -128,7 +82,7 @@ def main():
     example = wiretest.start(args.exe, ["--port", args.port, "--dcc-password", PASSWORD], "controller")
     controller = setup.Actuator(args)
     client = controller.client
-    heartbeats = Heartbeats(example, args.port)
+    heartbeats = wiretest.IAmBroadcasts(example, args.port, setup.DEVICE_INSTANCE)
     print(f"(heartbeat witnessed {'on the wire and ' if heartbeats.listener else ''}in the console)", flush=True)
     try:
         counts = heartbeats.watch(RUNNING_WATCH)

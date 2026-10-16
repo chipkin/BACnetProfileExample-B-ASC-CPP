@@ -84,19 +84,19 @@ def start_actuator(args, fault_file=None):
 
 
 class Actuator:
-    """The smart actuator as the Peer sees it: a wiretest.Client aimed at its port. A request
+    """The smart actuator as the Peer sees it: a wiretest.Client aimed at its port, with a short
+    timeout and visible retries (wiretest 0.7.0 Client(retries=, timeout=)): a request
     unanswered after REQUEST_TIMEOUT is sent again, up to RETRIES times, as a BACnet client
-    does (Number_Of_APDU_Retries); each resend prints [RETRY], so a lost request is visible,
-    not hidden. A busy Windows host loses the odd UDP datagram even on loopback, where an
-    answer takes milliseconds - so the timeout is short and a loss costs well under a second."""
+    does (Number_Of_APDU_Retries), each resend printing [RETRY]. A busy Windows host loses the
+    odd UDP datagram even on loopback, where an answer takes milliseconds - so the timeout is
+    short and a loss costs well under a second."""
 
     def __init__(self, args):
-        self.client = wiretest.Client(retries=RETRIES)
+        self.client = wiretest.Client(retries=RETRIES, timeout=REQUEST_TIMEOUT)
         self.port = args.port
 
     def read(self, object_identifier, property_identifier, array_index=None):
-        return self.client.read_property(self.port, *object_identifier, property_identifier, array_index,
-                                        timeout=REQUEST_TIMEOUT)
+        return self.client.read_property(self.port, *object_identifier, property_identifier, array_index)
 
     def value(self, object_identifier, property_identifier=wiretest.PROPERTY_PRESENT_VALUE, array_index=None):
         """The decoded value (NULL -> None), or 'no answer' / 'error' so a comparison fails readably."""
@@ -108,22 +108,21 @@ class Actuator:
     def command(self, object_identifier, value_octets, priority):
         """WriteProperty(Present_Value, value, priority)."""
         return self.client.write_property(self.port, *object_identifier, wiretest.PROPERTY_PRESENT_VALUE,
-                                          value_octets, priority, timeout=REQUEST_TIMEOUT)
+                                          value_octets, priority)
 
     def relinquish(self, object_identifier, priority):
         """WriteProperty(Present_Value, NULL, priority) - cl. 19.2.1."""
         return self.command(object_identifier, wiretest.application_null(), priority)
 
     def write(self, object_identifier, property_identifier, value_octets):
-        return self.client.write_property(self.port, *object_identifier, property_identifier, value_octets,
-                                          timeout=REQUEST_TIMEOUT)
+        return self.client.write_property(self.port, *object_identifier, property_identifier, value_octets)
 
     def close(self):
         self.client.close()
 
 
 def acked(answer):
-    return answer.answered and answer.frame.pdu_type == wiretest.PDU_SIMPLE_ACK
+    return answer.acked
 
 
 def remove(path):
