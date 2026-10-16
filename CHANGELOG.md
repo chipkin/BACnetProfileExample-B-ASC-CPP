@@ -48,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `common/` 2.5.0). Sample output shows the `- Unconfirmed: I-Am` suffix
   `common/` prints. Series profile table re-synced. APP_VERSION 1.2.2 -> 1.3.0
   (minor: `--dcc-password` changes behaviour).
+- **`common/` 3.3.0 -> 3.4.0**, copied verbatim from B-SS-CPP `5d78299`:
+  `HelperSendMessage` now sends a broadcast the stack addresses to this device's
+  own socket to the subnet broadcast, instead of unicasting it back to itself
+  (stack #3933). No change in this example's Wire Test results.
+- **`wiretest/` 0.5.0 -> 0.6.0**, copied verbatim from B-LS-CPP. Backward
+  compatible: it adds codec helpers and the `peer`, `alarm`, `workstation` and
+  `wait` modules this example does not use yet.
+- **The discovery Wire Test retries its Who-Is once**, printing a visible
+  `[RETRY]` line, when no I-Am comes back in 3 s. Who-Is is unconfirmed, so
+  nothing else retries it, and the example's UDP receive can drop a datagram on
+  Windows.
 
 ### Added
 
