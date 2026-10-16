@@ -18,7 +18,7 @@ see [README.md](../README.md).
 | **Vendor Identifier** | 389 |
 | **Product Name** | CAS BACnet Stack Example - B-ASC |
 | **Product Model Number** | CAS BACnet Stack Example - B-ASC |
-| **Application Software Version** | 1.3.0 |
+| **Application Software Version** | 1.4.0 |
 | **Firmware Revision** | 6.0.23.0 (the CAS BACnet Stack version) |
 | **BACnet Protocol Version** | 1 |
 | **BACnet Protocol Revision** | 30 |
@@ -28,9 +28,13 @@ the CAS BACnet Stack. It presents three read-only sensor objects (Analog
 Input, Binary Input, Multi-State Input) and three commandable output objects
 (Analog Output, Binary Output, Multi-State Output), answers ReadProperty for
 every required property of every object, accepts WriteProperty to the
-commandable outputs' `Present_Value`, responds to
-DeviceCommunicationControl, and is discoverable by Who-Is / I-Am and Who-Has
-/ I-Have. It is a tutorial for implementers of the B-ASC profile.
+commandable outputs' `Present_Value` (refusing values out of range) and acts
+on the winning command through a simulated valve, relay and drive whose
+feedback the input objects report, reports a disconnected valve through Analog
+Output 1's Reliability and Status_Flags FAULT, announces itself with an I-Am
+heartbeat that DeviceCommunicationControl silences and resumes, and is
+discoverable by Who-Is / I-Am and Who-Has / I-Have. It is a tutorial for
+implementers of the B-ASC profile.
 
 ## 2. BACnet standardized device profile (Annex L)
 
@@ -66,8 +70,8 @@ DS-RPM-B (ReadPropertyMultiple), DS-WPM-B, DS-COV-B, any alarm and event
 | Who-Has | no | **yes** |
 | I-Have | **yes** | - |
 
-An unsolicited I-Am is broadcast to the local subnet at start-up, as well as in
-response to Who-Is.
+An unsolicited I-Am is broadcast to the local subnet at start-up and then every
+5 s (the heartbeat), as well as in response to Who-Is.
 
 Any other confirmed service is rejected. That rejection is part of the profile
 boundary, not a limitation to work around.
@@ -79,8 +83,11 @@ The device accepts `enable` and `disable-initiation`. The deprecated plain
 16.1.2; this device is at Protocol_Revision 30). An optional password (none by
 default, so any request is accepted; set with `--dcc-password <string>`) is
 compared length-first-then-bytes; a missing or wrong one is rejected with
-`password-failure` (Error Class = SECURITY). The device initiates nothing after
-its start-up I-Am, so `disable-initiation` changes nothing observable.
+`password-failure` (Error Class = SECURITY). What `disable-initiation` stops is
+the 5 s I-Am heartbeat - the stack refuses to send it (clause 16.1.2) until an
+`enable`, or the end of the request's time duration; an I-Am in answer to Who-Is,
+ReadProperty and WriteProperty are still served. Requests of a limited duration
+are supported (K.5.6), as are indefinite ones.
 
 ## 5. Segmentation capability
 
@@ -107,7 +114,7 @@ writable (commandable, 16-slot Priority_Array).
 | Analog Input | 1 | Bronze | - |
 | Binary Input | 1 | Emerald | - |
 | Multi-State Input | 1 | Hot Pink | State_Text |
-| Analog Output | 1 | Chartreuse | - |
+| Analog Output | 1 | Chartreuse | Min_Pres_Value, Max_Pres_Value, Reliability |
 | Binary Output | 1 | Fuchsia | - |
 | Multi-State Output | 1 | Indigo | - |
 | Network Port | 1 | Vermilion | - |
@@ -176,7 +183,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Database_Revision | Unsigned | stack default, accepted (Generic UnsignedInteger default: `0`) | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
 
-### Analog Input 1 "Bronze" - REAL, degrees Celsius; starts at 21.5; read-only
+### Analog Input 1 "Bronze" - REAL, degrees Celsius; read-only; the temperature the simulated heating valve produces - it moves up to 1.0 C a second toward the winning Analog Output 1 setpoint (starts at 21.5)
 
 | Property | Datatype | Served by | Writable |
 |---|---|---|:---:|
@@ -190,7 +197,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Units | BACnetEngineeringUnits | app | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
 
-### Binary Input 1 "Emerald" - starts inactive; read-only
+### Binary Input 1 "Emerald" - read-only; the simulated relay's feedback contact - takes the winning Binary Output 1 command within a second (starts inactive)
 
 | Property | Datatype | Served by | Writable |
 |---|---|---|:---:|
@@ -204,7 +211,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Polarity | BACnetPolarity | app | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
 
-### Multi-state Input 1 "Hot Pink" - state 1 of 3: On, Off, Auto; read-only
+### Multi-state Input 1 "Hot Pink" - 3 states: On, Off, Auto; read-only; the simulated drive's speed - takes the winning Multi-State Output 1 command within a second
 
 | Property | Datatype | Served by | Writable |
 |---|---|---|:---:|
@@ -219,7 +226,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | State_Text *(optional, enabled)* | BACnetARRAY[N] of CharacterString | app | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
 
-### Analog Output 1 "Chartreuse" - REAL setpoint, default 20.0 C; commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyReal/GetPropertyBool
+### Analog Output 1 "Chartreuse" - REAL setpoint, default 20.0 C, accepts 10.0 .. 30.0 (Min_Pres_Value / Max_Pres_Value, else value-out-of-range); Reliability no-fault-detected, or no-output while the simulated valve actuator is disconnected (the stack derives Status_Flags FAULT from it); commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyReal/GetPropertyBool
 
 | Property | Datatype | Served by | Writable |
 |---|---|---|:---:|
@@ -229,8 +236,11 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Present_Value | Real | stack | yes |
 | Status_Flags | BACnetStatusFlags | stack | no |
 | Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
+| Reliability *(optional, enabled)* | BACnetReliability | app | no |
 | Out_Of_Service | Boolean | app | no |
 | Units | BACnetEngineeringUnits | app | no |
+| Min_Pres_Value *(optional, enabled)* | Real | app | no |
+| Max_Pres_Value *(optional, enabled)* | Real | app | no |
 | Priority_Array | BACnetARRAY[16] of BACnetOptionalReal | stack | no |
 | Relinquish_Default | Real | app | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |

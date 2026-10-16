@@ -9,8 +9,13 @@
 // example plus one device-management capability: it answers
 // DeviceCommunicationControl.
 //
-// A B-ASC (ANSI/ASHRAE 135, Annex L.4.3) is a controller for a specific
-// application that can:
+// "A B-ASC is a controller with limited resources relative to a B-AAC. It is
+// intended for use in a specific application and supports limited
+// programmability." (ANSI/ASHRAE 135-2024, Annex L.4.3). What it adds to a B-SA
+// is one Device and Network Management line of that clause: "Ability to respond
+// to communication control messages". Its Profile Function: a controller that
+// is commanded like a B-SA, and that a management station can silence and
+// un-silence. The BIBBs:
 //
 //     DS-RP-B   - respond to ReadProperty requests,
 //     DS-WP-B   - allow other devices to WriteProperty its objects, and
@@ -21,18 +26,35 @@
 // plus discovery (Who-Is/I-Am, Who-Has/I-Have). It does NOT require COV, alarms,
 // scheduling, or trending, so this example leaves those off.
 //
-// The device keeps the same objects as B-SA - three read-only sensor inputs and
-// three commandable outputs a client drives with WriteProperty. Each object has a
-// colour name (the convention shared across this example series):
+// SOMETHING TO SILENCE. "Disable initiation" only means something if the device
+// initiates. Answering Who-Is is not initiating (cl. 16.1.2 exempts it), so this
+// example announces itself with an unsolicited I-Am every HEARTBEAT_SECONDS
+// (section 2d) - I-Am is the one service DM-DDB-B has the device initiate, so the
+// BACnet Surface does not grow. While a DeviceCommunicationControl
+// DISABLE_INITIATION is in force the stack refuses to send it; the heartbeat
+// stops, and resumes on ENABLE or when the time duration runs out.
+//
+// The device keeps the same objects as B-SA - three commandable outputs a client
+// drives with WriteProperty, and three read-only inputs that are their FEEDBACK.
+// Each object has a colour name (the convention shared across this example
+// series):
 //
 //     Device 389003            "Chipkin Example B-ASC"     (instance configurable with --deviceID)
-//     Analog Input  1          "Bronze"      (REAL, degrees Celsius; read-only)
-//     Binary Input  1          "Emerald"     (active / inactive; read-only)
-//     Multi-State Input 1      "Hot Pink"    (state 1..3; read-only)
-//     Analog Output 1          "Chartreuse"  (REAL setpoint; WRITABLE, commandable)
-//     Binary Output 1          "Fuchsia"     (active / inactive; WRITABLE, commandable)
-//     Multi-State Output 1     "Indigo"      (state 1..3; WRITABLE, commandable)
+//     Analog Input  1          "Bronze"      (REAL, degrees Celsius; read-only - the temperature the valve produces)
+//     Binary Input  1          "Emerald"     (active / inactive; read-only - the relay's feedback contact)
+//     Multi-State Input 1      "Hot Pink"    (state 1..3; read-only - the speed the drive is running at)
+//     Analog Output 1          "Chartreuse"  (REAL setpoint, 10.0 .. 30.0 C; WRITABLE, commandable)
+//     Binary Output 1          "Fuchsia"     (active / inactive relay; WRITABLE, commandable)
+//     Multi-State Output 1     "Indigo"      (speed 1..3; WRITABLE, commandable)
 //     Network Port 1           "Vermilion"   (the BACnet/IP port - required)
+//
+// SIMULATION. As in B-SA, section 1b is an actuator Simulation that stands in for
+// the equipment: a heating valve moves the temperature toward the winning Analog
+// Output 1 command, a relay follows Binary Output 1, a drive follows Multi-State
+// Output 1, and each reports back through its input. It is NOT part of the
+// BACnet Surface. Its Failure Mode is a disconnected valve actuator (Analog
+// Output 1 Reliability NO_OUTPUT, Status_Flags FAULT), reachable only through a
+// test-only hook (ACTUATOR_FAULT_FILE_VARIABLE).
 //
 // Output objects are COMMANDABLE: their Present_Value is driven by a 16-slot
 // BACnet Priority_Array. A WriteProperty(Present_Value, value, priority) sets a
@@ -50,7 +72,8 @@
 // Get*Property callbacks below, and a few are turned on with SetPropertyEnabled.
 //
 // Interactive keys (handled by the shared helper): h = help, q = quit,
-// up/down = nudge Analog Input 1 by +/-1.1. Command line: --port <n>,
+// up/down = disturb the simulated temperature (Analog Input 1) by +/-1.1; the
+// valve then brings it back to the setpoint. Command line: --port <n>,
 // --deviceID <n>, --dcc-password <string>.
 //
 // All the UDP/stack plumbing lives in common/CASExampleHelper so this file can
@@ -63,7 +86,10 @@
                                     // LoadBACnetFunctions() before any BACnetStack_* call -
                                     // see the top of main() below.
 
+#include <chrono>
+#include <fstream>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 
@@ -79,7 +105,7 @@ using namespace CASBACnetStackExampleConstants;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-ASC (Application Specific Controller) Example - C++";
-static const char* APP_VERSION = "1.3.0";
+static const char* APP_VERSION = "1.4.0";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
 // to 389003 and can be overridden on the command line with --deviceID.
@@ -178,10 +204,12 @@ static uint8_t g_ipSubnetMask[4] = { 0, 0, 0, 0 };
 static uint8_t g_ipDefaultGateway[4] = { 0, 0, 0, 0 };
 static uint16_t g_bacnetIpUdpPort = 47808;
 
-// Analog Input 1's live present value (degrees Celsius). Starts at 21.5 and is
-// nudged by the up/down arrow keys. A real sensor would update this from
-// hardware instead.
-static float g_analogInput1Value = 21.5f;
+// The input objects' live values - the actuators' feedback. The Get callbacks
+// only ever hand these back; the Simulation (section 1b) is the only thing that
+// changes them. On a real device your feedback sampling updates them instead.
+static float g_analogInput1Value = 21.5f;       // degrees Celsius
+static uint32_t g_binaryInput1Value = 0;        // 0 = inactive, 1 = active
+static uint32_t g_multiStateInput1Value = 1;    // 1..MULTI_STATE_INPUT_NUMBER_OF_STATES
 
 // The commandable OUTPUT objects (all instance 1) and their colour names. These
 // are inherited verbatim from B-SA, which defines this pattern for the series:
@@ -193,10 +221,11 @@ static const uint32_t MULTI_STATE_OUTPUT_NUMBER_OF_STATES = 3;
 static const uint32_t BACNET_PRIORITY_ARRAY_SIZE = 16;
 
 // A BACnet commandable value: a 16-slot Priority_Array plus a Relinquish_Default.
-// Each slot is either null (relinquished) or holds a commanded value. A real
-// device would map the resolved Present_Value onto its physical output; here we
-// just store the commands. The values are kept as double and cast per object
-// type (REAL for AO, 0/1 for BO, state number for MSO).
+// Each slot is either null (relinquished) or holds a commanded value. The
+// resolved value (ResolvedCommand() below - the same answer the stack gives for
+// Present_Value) is what drives the output; here that is the Simulation in
+// section 1b. The values are kept as double and cast per object type (REAL for
+// AO, 0/1 for BO, state number for MSO).
 struct Commandable {
     bool isSet[16];          // is slot i (1..16) commanded?
     double value[16];        // the commanded value at slot i
@@ -258,6 +287,116 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
     *slotIsSet = c->isSet[propertyArrayIndex - 1];
     *slotValue = c->value[propertyArrayIndex - 1];
     return true;
+}
+
+// The command that wins (cl. 19.2): the value at the highest-priority (lowest
+// numbered) commanded slot, or Relinquish_Default when every slot is null. This
+// is the value the stack reports as Present_Value, and the one an output obeys.
+static double ResolvedCommand(const Commandable* c) {
+    for (uint32_t slot = 0; slot < BACNET_PRIORITY_ARRAY_SIZE; ++slot) {
+        if (c->isSet[slot]) {
+            return c->value[slot];
+        }
+    }
+    return c->relinquishDefault;
+}
+
+// Analog Output 1 accepts setpoints in this range, and serves it as the optional
+// Min_Pres_Value / Max_Pres_Value (cl. 12.3.12 / 12.3.13: the lowest / highest
+// number "that can be reliably used for the Present_Value"). A write outside it
+// is refused with value-out-of-range.
+static const uint32_t PROPERTY_IDENTIFIER_MAX_PRES_VALUE = 65;
+static const uint32_t PROPERTY_IDENTIFIER_MIN_PRES_VALUE = 69;
+static const float ANALOG_OUTPUT_MIN_PRES_VALUE = 10.0f;
+static const float ANALOG_OUTPUT_MAX_PRES_VALUE = 30.0f;
+
+// Analog Output 1's Reliability (cl. 12.3.9). NO_FAULT_DETECTED while the valve
+// actuator is connected; NO_OUTPUT ("No physical device is connected to the
+// Output object", cl. 12.1) while it is not. The stack builds the FAULT bit of
+// Status_Flags from this property by itself (cl. 12.3.7) - the example only has
+// to serve it.
+static const uint32_t PROPERTY_IDENTIFIER_RELIABILITY = 103;
+static const uint32_t RELIABILITY_NO_FAULT_DETECTED = 0;
+static const uint32_t RELIABILITY_NO_OUTPUT = 6;
+static uint32_t g_analogOutput1Reliability = RELIABILITY_NO_FAULT_DETECTED;
+
+// -----------------------------------------------------------------------------
+// 1b. The actuator Simulation (NOT part of the BACnet Surface)
+//
+// Stands in for the equipment the outputs drive. Once a second:
+//   - the heating valve (Analog Output 1) moves the temperature (Analog Input 1)
+//     up to 1.0 C toward the winning setpoint;
+//   - the relay's feedback contact (Binary Input 1) takes the winning Binary
+//     Output 1 command;
+//   - the drive's speed (Multi-State Input 1) takes the winning Multi-State
+//     Output 1 command;
+// and the valve actuator's connection is checked. Feedback that lags its command
+// by up to a second is what a real actuator gives you, too.
+//
+// The disconnected valve is a TEST-ONLY hook, not a feature: when the
+// environment variable named by ACTUATOR_FAULT_FILE_VARIABLE names a file, the
+// valve actuator counts as disconnected for as long as that file exists. A Wire
+// Test creates and deletes the file. While disconnected, the valve moves nothing
+// - the temperature stays where it is whatever is commanded - and Analog Output 1
+// Reliability reads NO_OUTPUT; commands are still accepted into the
+// Priority_Array, and once the file is gone the valve obeys the winning one. On a
+// real device, set Reliability from your output driver's own diagnostics (an
+// open-circuit detect, a position feedback that does not move, ...).
+// -----------------------------------------------------------------------------
+static const char* const ACTUATOR_FAULT_FILE_VARIABLE = "CAS_EXAMPLE_TEST_ACTUATOR_FAULT_FILE";
+static std::string g_actuatorFaultFile;   // read once at start-up; empty = no hook
+static const float VALVE_MAX_CHANGE_PER_SECOND = 1.0f;   // degrees Celsius
+
+static std::string ReadEnvironmentVariable(const char* name) {
+#if defined(_WIN32)
+    char* environmentValue = NULL;
+    size_t environmentValueLength = 0;
+    if (_dupenv_s(&environmentValue, &environmentValueLength, name) != 0 || environmentValue == NULL) {
+        return std::string();
+    }
+    std::string result(environmentValue);
+    free(environmentValue);
+    return result;
+#else
+    const char* environmentValue = getenv(name);
+    return environmentValue != NULL ? std::string(environmentValue) : std::string();
+#endif
+}
+
+static bool ValveActuatorDisconnected() {
+    return !g_actuatorFaultFile.empty() && std::ifstream(g_actuatorFaultFile.c_str()).good();
+}
+
+static void ActuatorSimulationTick() {
+    static const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+    static unsigned lastSecond = 0;
+    const unsigned secondsRunning = (unsigned)std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - started).count();
+    if (secondsRunning == lastSecond) {
+        return;
+    }
+    lastSecond = secondsRunning;
+
+    const uint32_t reliability = ValveActuatorDisconnected() ? RELIABILITY_NO_OUTPUT : RELIABILITY_NO_FAULT_DETECTED;
+    if (reliability != g_analogOutput1Reliability) {
+        g_analogOutput1Reliability = reliability;
+        printf("Simulation: Analog Output 1 (Chartreuse) valve actuator %s - Reliability %s\n",
+               reliability == RELIABILITY_NO_OUTPUT ? "disconnected" : "reconnected",
+               reliability == RELIABILITY_NO_OUTPUT ? "NO_OUTPUT" : "NO_FAULT_DETECTED");
+    }
+    if (g_analogOutput1Reliability == RELIABILITY_NO_FAULT_DETECTED) {
+        const float setpoint = (float)ResolvedCommand(&g_analogOutput);
+        const float difference = setpoint - g_analogInput1Value;
+        if (difference > VALVE_MAX_CHANGE_PER_SECOND) {
+            g_analogInput1Value += VALVE_MAX_CHANGE_PER_SECOND;
+        } else if (difference < -VALVE_MAX_CHANGE_PER_SECOND) {
+            g_analogInput1Value -= VALVE_MAX_CHANGE_PER_SECOND;
+        } else {
+            g_analogInput1Value = setpoint;
+        }
+    }
+    g_binaryInput1Value = (uint32_t)ResolvedCommand(&g_binaryOutput);
+    g_multiStateInput1Value = (uint32_t)ResolvedCommand(&g_multiStateOutput);
 }
 
 // -----------------------------------------------------------------------------
@@ -369,6 +508,14 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
             *value = (float)c->relinquishDefault;
             return true;
         }
+        if (propertyIdentifier == PROPERTY_IDENTIFIER_MIN_PRES_VALUE) {
+            *value = ANALOG_OUTPUT_MIN_PRES_VALUE;
+            return true;
+        }
+        if (propertyIdentifier == PROPERTY_IDENTIFIER_MAX_PRES_VALUE) {
+            *value = ANALOG_OUTPUT_MAX_PRES_VALUE;
+            return true;
+        }
     }
     return false;
 }
@@ -389,7 +536,7 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
             // ON REAL HARDWARE: return your cached input state here - the same rule
             // as GetPropertyReal above applies (never block this callback on slow
             // I/O; sample on a timer/another thread and hand back the latest).
-            *value = 0; // inactive - the series-wide starting value
+            *value = g_binaryInput1Value; // the relay's feedback contact
             return true;
         }
         if (propertyIdentifier == PROPERTY_IDENTIFIER_POLARITY) {
@@ -433,6 +580,14 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
         *value = ENGINEERING_UNITS_DEGREES_CELSIUS;
         return true;
     }
+    // Analog Output 1's Reliability (enabled in main()). The stack also reads it
+    // through this callback to build Status_Flags, so once enabled it must always
+    // answer.
+    if (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE &&
+        propertyIdentifier == PROPERTY_IDENTIFIER_RELIABILITY) {
+        *value = g_analogOutput1Reliability;
+        return true;
+    }
     if (objectType == OBJECT_TYPE_NETWORK_PORT &&
         objectInstance == NETWORK_PORT_INSTANCE &&
         propertyIdentifier == PROPERTY_IDENTIFIER_BACNET_IP_MODE) {
@@ -455,7 +610,7 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
     if (objectType == OBJECT_TYPE_MULTI_STATE_INPUT &&
         objectInstance == MULTI_STATE_INPUT_INSTANCE) {
         if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-            *value = 1; // state 1 (valid range is 1..Number_Of_States)
+            *value = g_multiStateInput1Value; // the drive's speed; valid range is 1..Number_Of_States
             return true;
         }
         if (propertyIdentifier == PROPERTY_IDENTIFIER_NUMBER_OF_STATES) {
@@ -710,20 +865,20 @@ bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      uint32_t* errorCode) {
     (void)useArrayIndex;
     (void)propertyArrayIndex;
-    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
     Commandable* c = GetCommandable(objectType, objectInstance);
     if (c != NULL && objectType == OBJECT_TYPE_ANALOG_OUTPUT &&
         propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        // An Analog Output accepts any REAL here. A real device that models the
-        // optional Min_Pres_Value / Max_Pres_Value properties would reject an
-        // out-of-band value with value-out-of-range, exactly as the Binary and
-        // Multi-State Output setters below do for their fixed ranges:
-        //     if (value < g_min || value > g_max) {
-        //         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE; return false;
-        //     }
+        // The setpoint must lie in Min_Pres_Value .. Max_Pres_Value, the range this
+        // object serves. Reject anything outside it with value-out-of-range,
+        // exactly as the Binary and Multi-State Output setters below do for
+        // their fixed ranges - nothing is stored, so the output does not move.
+        if (value < ANALOG_OUTPUT_MIN_PRES_VALUE || value > ANALOG_OUTPUT_MAX_PRES_VALUE) {
+            *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+            return false;
+        }
         CommandWrite(c, priority, (double)value);
         printf("WriteProperty: Analog Output %u (Chartreuse) <- %.2f @ priority %u\n",
                objectInstance, value, EffectivePriority(priority));
@@ -911,6 +1066,45 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
     // This differs from the SetProperty* callbacks, which DO have a sensible
     // fallback (writeAccessDenied) - so do not carry the habit across.
     return true;
+}
+
+// -----------------------------------------------------------------------------
+// 2d. The I-Am heartbeat - what DeviceCommunicationControl silences
+//
+// Every HEARTBEAT_SECONDS the device broadcasts an unsolicited I-Am, announcing
+// that it is still on the network (DM-DDB-B: the B device initiates I-Am). This
+// is the example's one INITIATED message, and so the one a management station's
+// DeviceCommunicationControl visibly controls. Cl. 16.1.2: with
+// DISABLE_INITIATION in force "the responding BACnet-user shall discontinue the
+// initiation of messages except for I-Am requests issued in accordance with the
+// Who-Is service procedure" - this I-Am is not one of those, so the stack
+// refuses to send it, while a Who-Is still gets its I-Am and every ReadProperty
+// and WriteProperty is still answered.
+//
+// The example does NOT track the DCC state itself: it simply keeps asking, and
+// the stack decides. That is the point - an application that checked a flag of
+// its own could get it wrong; this way the heartbeat stops exactly when the stack
+// says initiation is disabled, and starts again on ENABLE or when the request's
+// Time_Duration runs out.
+//
+// A product would announce far less often - minutes, or not at all; 5 s keeps
+// the demonstration watchable.
+// -----------------------------------------------------------------------------
+static const unsigned HEARTBEAT_SECONDS = 5;
+
+static void HeartbeatTick() {
+    static const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+    static unsigned lastHeartbeat = 0;
+    const unsigned heartbeat = (unsigned)(std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - started).count() / HEARTBEAT_SECONDS);
+    if (heartbeat == lastHeartbeat) {
+        return;
+    }
+    lastHeartbeat = heartbeat;
+    // The same subnet broadcast as the start-up I-Am. Each one the stack really
+    // sends shows as a "TX ... (broadcast) ... I-Am" line on the console; one it
+    // refuses under DISABLE_INITIATION shows nothing.
+    CASExampleHelper::SendIAm(g_deviceInstance);
 }
 
 // -----------------------------------------------------------------------------
@@ -1116,6 +1310,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Analog Output 1's optional properties: the setpoint range it accepts, and
+    // Reliability - how it says its valve actuator is not connected. Enabling
+    // Reliability also gives the FAULT bit of Status_Flags its meaning; the stack
+    // derives that bit from it.
+    const uint32_t analogOutputOptionalProperties[] = {
+        PROPERTY_IDENTIFIER_MIN_PRES_VALUE, PROPERTY_IDENTIFIER_MAX_PRES_VALUE, PROPERTY_IDENTIFIER_RELIABILITY };
+    for (size_t propertyIndex = 0; propertyIndex < sizeof(analogOutputOptionalProperties) / sizeof(analogOutputOptionalProperties[0]); ++propertyIndex) {
+        if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_ANALOG_OUTPUT, ANALOG_OUTPUT_INSTANCE,
+                                            analogOutputOptionalProperties[propertyIndex], true)) {
+            printf("Error: Failed to enable property %u on Analog Output 1 (Chartreuse).\n",
+                   analogOutputOptionalProperties[propertyIndex]);
+            return 1;
+        }
+    }
+
+    // The Simulation's test-only disconnected-valve hook (section 1b).
+    g_actuatorFaultFile = ReadEnvironmentVariable(ACTUATOR_FAULT_FILE_VARIABLE);
+
     // --- Make the output objects commandable --------------------------------
     // A commandable object's Present_Value is resolved from a 16-slot
     // Priority_Array plus a Relinquish_Default: a WriteProperty sets a slot,
@@ -1170,10 +1382,13 @@ int main(int argc, char** argv) {
 
     // --- Run the stack ------------------------------------------------------
     // BACnetStack_Tick() processes incoming messages and timers. Call it
-    // continuously, and poll the keyboard for interactive commands.
+    // continuously, step the actuator Simulation and the I-Am heartbeat beside
+    // it, and poll the keyboard for interactive commands.
     bool running = true;
     while (running) {
         BACnetStack_Tick();
+        ActuatorSimulationTick();
+        HeartbeatTick();
 
         switch (CASExampleHelper::PollKey()) {
             case CASExampleHelper::KeyCommand::Help:

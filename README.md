@@ -5,7 +5,13 @@ A minimal, copy-paste-friendly example showing how to implement the BACnet
 [CAS BACnet Stack](https://store.chipkin.com/services/stacks/bacnet-stack).
 It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 **WriteProperty** to its commandable outputs, responds to
-**DeviceCommunicationControl**, and is discoverable via **Who-Is / I-Am**.
+**DeviceCommunicationControl**, and is discoverable via **Who-Is / I-Am**. It
+announces itself with an **I-Am heartbeat** every 5 s - the message a management
+station's DeviceCommunicationControl visibly silences and lets resume. Each
+output **does what the winning command says** (a heating valve, a relay and a
+drive, each reporting back through an input), and a disconnected valve shows up
+as a **fault**. The valve, relay and drive are a
+[Simulation](#the-actuator-simulation); everything BACnet does with them is real.
 
 **[Download a prebuilt binary](https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/releases)**
 (Windows and Linux x64) - or build it yourself, see [Build](#build) below.
@@ -15,7 +21,7 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty**, accepts
 - **[docs/PICS.md](docs/PICS.md)** - the Protocol Implementation Conformance
   Statement: every object, every property, and who answers it.
 
-> **Versions:** this document describes **example v1.3.0**, built and verified
+> **Versions:** this document describes **example v1.4.0**, built and verified
 > against **CAS BACnet Stack 6.0.23** (`6.x` @ `64b2cfac5`), at
 > **Protocol_Revision 30**, with the vendored `common/` helper at **v3.4.0**.
 > Running the example prints all three - if what it prints disagrees with this
@@ -73,13 +79,18 @@ Concretely, the callback:
 > effect. The callback still logs what the client asked for on the deprecated
 > path, because the rejection happens in the stack after the callback returns.
 
-**What you can observe today, and what you cannot.** The password check and the
-SimpleACK / Error answers are on the wire. The *effect* of `disable-initiation`
-is not: clause 16.1.2 stops a device initiating messages *other than* I-Am and
-I-Have sent in answer to Who-Is and Who-Has, and this example initiates nothing
-after its start-up I-Am. So after a `disable-initiation` it behaves exactly as
-before. The stack holds the communication state; the example has no periodic
-request of its own that you could watch stop.
+**What you can observe.** Clause 16.1.2 stops a device initiating messages
+*other than* I-Am and I-Have sent in answer to Who-Is and Who-Has - so
+`disable-initiation` is only visible on a device that initiates something. This
+one does: an unsolicited **I-Am heartbeat** every 5 s (`HeartbeatTick()`,
+section 2d of `main.cpp`; I-Am is the service DM-DDB-B has the device initiate,
+so the BACnet Surface does not grow). After a `disable-initiation` the heartbeat
+**stops** - the stack refuses to send it - while ReadProperty, WriteProperty and
+Who-Is are still answered. After an `enable`, or when the request's time
+duration runs out, it **resumes**. The example keeps no communication state of
+its own: it asks for a heartbeat every 5 s and the stack decides. A product
+would announce far less often (minutes, or not at all); 5 s keeps the
+demonstration watchable.
 
 The example ships with **no password** (accept any request). Start it with
 `--dcc-password <string>` to require one; a missing or wrong password is then
@@ -91,19 +102,68 @@ product, set the password from your own configuration.
 ```
 Device 389003  "Chipkin Example B-ASC"   (Vendor 389 - Chipkin Automation Systems)
     │
-    ├── Analog Input  1       "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
-    ├── Binary Input  1       "Emerald"     Present_Value  inactive  (0 = inactive / 1 = active; read-only)
-    ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state, 1..3; read-only)
-    ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
-    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive  (0/1; WRITABLE, commandable)
-    ├── Multi-State Output 1  "Indigo"      Present_Value  1       (state, 1..3; WRITABLE, commandable)
+    ├── Analog Input  1       "Bronze"      Present_Value  21.5 -> follows the setpoint  (REAL, degrees Celsius; read-only)
+    ├── Binary Input  1       "Emerald"     Present_Value  follows Binary Output 1      (0 = inactive / 1 = active; read-only)
+    ├── Multi-State Input 1   "Hot Pink"    Present_Value  follows Multi-State Output 1 (state, 1..3; read-only)
+    ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint, 10.0 .. 30.0 C; WRITABLE, commandable)
+    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive  (0/1 relay; WRITABLE, commandable)
+    ├── Multi-State Output 1  "Indigo"      Present_Value  1       (speed, 1..3; WRITABLE, commandable)
     └── Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
 ```
 
 The three **input** objects (Bronze, Emerald, Hot Pink) are the shared minimum
-every example in this series carries; the three **output** objects (Chartreuse,
-Fuchsia, Indigo) are commandable via a `Priority_Array`. Object names follow this
-series' colour-naming convention (Device is always "Chipkin Example B-ASC").
+every example in this series carries; here each is the **feedback** of one
+output. The three **output** objects (Chartreuse, Fuchsia, Indigo) are
+commandable via a `Priority_Array`. Object names follow this series'
+colour-naming convention (Device is always "Chipkin Example B-ASC").
+
+## The scenario: a controller a management station can silence
+
+What a B-ASC is for, from Annex L.4.3 of ANSI/ASHRAE 135-2024: a B-SA's
+*"Ability to allow modification of some or all of its BACnet objects by another
+device"*, plus *"Ability to respond to communication control messages"*. Against
+a **Peer** - a controller and a management station (any BACnet client, or the
+Python client in [`tests/`](tests/README.md)):
+
+1. **Commanded.** The Peer writes Analog Output 1 = `24.0` at priority 8: the
+   temperature (Analog Input 1) climbs to `24.0`. A write at a lower priority
+   changes nothing; relinquishing hands the output to the next command, then to
+   `Relinquish_Default` (`20.0`). Binary and Multi-State Output 1 work the same
+   way, with Binary Input 1 and Multi-State Input 1 as their feedback - exactly
+   as in the B-SA example.
+2. **Silenced.** The management station sends DeviceCommunicationControl
+   `disable-initiation` with the password: the I-Am heartbeat stops. The
+   controller still answers ReadProperty, still obeys WriteProperty, and still
+   answers a Who-Is with an I-Am.
+3. **Resumed.** `enable` brings the heartbeat back. A `disable-initiation` for
+   a **time duration** (1 minute, say) ends by itself: the heartbeat resumes
+   when the minute is up, with no `enable` sent.
+4. **Failure Mode - a request it must refuse.** A wrong or missing password gets
+   Error `security` / `password-failure`; the deprecated plain `disable` gets
+   Error `services` / `service-request-denied` (clause 16.1.1.3.1). Neither
+   silences anything. Out-of-range writes get `value-out-of-range`; a write to
+   an input gets `write-access-denied`.
+5. **Failure Mode - a disconnected actuator.** Analog Output 1 `Reliability`
+   reads `no-output` and `Status_Flags` FAULT is TRUE; commands are still
+   accepted, but the temperature does not move until the valve is reconnected.
+
+### The actuator Simulation
+
+The same as the [B-SA example's](https://github.com/chipkin/BACnetProfileExample-B-SA-CPP):
+non-BACnet scaffolding, outside the BACnet Surface, in section 1b of
+[`main.cpp`](main.cpp) (`ActuatorSimulationTick()`, called beside
+`BACnetStack_Tick()`). Once a second the **heating valve** moves the temperature
+(Analog Input 1) up to 1.0 C toward the winning Analog Output 1 setpoint, the
+**relay's feedback contact** (Binary Input 1) takes the winning Binary Output 1
+command, and the **drive's speed** (Multi-State Input 1) takes the winning
+Multi-State Output 1 command. "Winning" is `ResolvedCommand()`, the same answer
+the stack gives for `Present_Value` (clause 19.2).
+
+The **disconnected valve** is a test-only hook, not a feature: if the
+environment variable `CAS_EXAMPLE_TEST_ACTUATOR_FAULT_FILE` names a file, the
+valve actuator counts as disconnected for as long as that file exists. Nothing
+on the network can disconnect it. The I-Am heartbeat is **not** Simulation: it
+is a real BACnet message, and the one this example initiates.
 
 ## What this example supports
 
@@ -234,7 +294,7 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-ASC (Application Specific Controller) Example - C++ v1.3.0
+BACnet B-ASC (Application Specific Controller) Example - C++ v1.4.0
 CAS BACnet Stack version: 6.0.23.0
 Common helper (common/) version: 3.4.0
 FYI: Listening for BACnet/IP on UDP port 47808 (Network Port 1).
@@ -242,12 +302,14 @@ TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1) - Unconfirmed: I
 FYI: Device 389003 ("Chipkin Example B-ASC") ready. Vendor ID 389. Press 'h' for help.
 ```
 
-The `TX` line is the start-up I-Am the device broadcasts to announce itself. It
+The `TX` line is the start-up I-Am the device broadcasts to announce itself; the
+same line appears every 5 s after that, for the heartbeat (and stops while a
+`disable-initiation` is in force). It
 goes to the **local subnet broadcast** address (here `192.168.3.255`, computed
 from the Network Port's interface), not the global `255.255.255.255`. As clients
 talk to the device you'll see `RX ... bytes from ...` and `TX ... bytes to ...`
 lines; a WriteProperty to an output prints a line such as `WriteProperty:
-Analog Output 1 (Chartreuse) <- 42.50 @ priority 8`, and a
+Analog Output 1 (Chartreuse) <- 24.00 @ priority 8`, and a
 DeviceCommunicationControl prints e.g. `DeviceCommunicationControl:
 disable-initiation (keep responding) (indefinitely)`.
 
@@ -277,11 +339,12 @@ While the example runs, these keys are available:
 |-----|--------|
 | `h` | Show the version information and this command list. |
 | `q` | Quit. |
-| up arrow | Increase Analog Input 1 (`Bronze`) by 1.1. |
-| down arrow | Decrease Analog Input 1 (`Bronze`) by 1.1. |
+| up arrow | Disturb the simulated temperature (Analog Input 1, `Bronze`) up by 1.1. |
+| down arrow | Disturb the simulated temperature (Analog Input 1, `Bronze`) down by 1.1. |
 
-The up/down keys change the live `Present_Value` of the analog input, so a client
-re-reading it sees the new value.
+The up/down keys push the simulated temperature off its setpoint; within a few
+seconds the valve brings it back, and a client re-reading Analog Input 1 sees
+both.
 
 ## Verify
 
@@ -297,18 +360,21 @@ Use a BACnet client such as the
    `"Chipkin Example B-ASC"`; `Protocol_Revision` returns `30`; `Description` returns the
    profile description string.
 4. **Read a sensor** - ReadProperty Analog Input `1` -> `Present_Value` returns
-   `21.5`; `Units` returns `degrees-Celsius`. Repeat for Binary Input `1`
+   `20.0` once the valve has settled at the default setpoint (it starts at
+   `21.5`); `Units` returns `degrees-Celsius`. Repeat for Binary Input `1`
    (`"Emerald"`) and Multi-State Input `1` (`"Hot Pink"`).
-5. **Command an output** - WriteProperty Analog Output `1` `Present_Value` = `42.5`
-   at priority `8`; re-read `Present_Value` (`42.5`) and `Priority_Array[8]`
-   (`42.5`); write `NULL` at priority `8` to relinquish; `Present_Value` returns to
-   `20.0` (its `Relinquish_Default`). Repeat for Binary/Multi-State Output. A write
-   to a read-only *input*, or an out-of-range value, is rejected.
-6. **Communication control (the B-ASC test)** - send a **DeviceCommunicationControl**
-   with `disable-initiation`: the device SimpleACKs and keeps answering reads.
-   (It initiates nothing after start-up, so there is nothing visible to stop -
-   see [DeviceCommunicationControl](#devicecommunicationcontrol-the-b-asc-addition).)
-   Send `enable` to resume. Sending the deprecated plain `disable` returns
+5. **Command an output** - WriteProperty Analog Output `1` `Present_Value` = `24.0`
+   at priority `8`; re-read `Present_Value` (`24.0`) and `Priority_Array[8]`
+   (`24.0`), and watch Analog Input `1` climb to `24.0`; write `NULL` at priority
+   `8` to relinquish; `Present_Value` returns to `20.0` (its
+   `Relinquish_Default`), and so does Analog Input `1`. Repeat for
+   Binary/Multi-State Output (watch Binary / Multi-State Input `1`). A write to a
+   read-only *input*, or an out-of-range value, is rejected.
+6. **Communication control (the B-ASC test)** - watch the console (or a capture
+   of the subnet broadcast): a `TX ... (broadcast) ... I-Am` line every 5 s. Send
+   a **DeviceCommunicationControl** with `disable-initiation`: the device
+   SimpleACKs, the heartbeat lines stop, and it keeps answering reads and
+   writes. Send `enable` to resume. Sending the deprecated plain `disable` returns
    `service-request-denied` at Protocol_Revision 30 - that is correct. Restart
    the example with `--dcc-password s3cret`: a request with no password or the
    wrong one is rejected with `security` / `password-failure`, and one with
@@ -319,12 +385,20 @@ For a property-by-property review against the conformance statement, see
 
 ## Wire Tests
 
-The discovery half of the checks above, automated: a Python BACnet client drives
-the running example over BACnet/IP from outside it, the way a client discovers a
-device - Who-Is, the Device's `Object_List`, then for every object its
-`Property_List` and a ReadProperty of every property it lists. Every read must
-come back as a value; an Error, Reject or Abort fails the run. Python 3 standard
-library only:
+The checks above, automated: a Python BACnet client (the Peer) drives the running
+example over BACnet/IP from outside it. Python 3 standard library only.
+
+| Script | What it proves |
+|---|---|
+| `discovery_test.py` | Who-Is, the Device's `Object_List`, then for every object its `Property_List` and a ReadProperty of every property it lists - every read comes back as a value. |
+| `commanding_test.py` | Commands each output at two priorities; `Present_Value`, `Priority_Array` and `Current_Command_Priority` follow the winning command, and the feedback input follows it too (the B-SA Profile Function, which a B-ASC includes). |
+| `failure_modes_test.py` | A disconnected valve (`no-output`, FAULT, command accepted but not obeyed), out-of-range writes, a write to an input. |
+| `dcc_test.py` | **The B-ASC Profile Function.** With `--dcc-password`: the heartbeat runs; wrong / missing password and deprecated `disable` are refused and it keeps running; `disable-initiation` stops it while ReadProperty, WriteProperty and Who-Is are still answered; `enable` resumes it; a 1-minute `disable-initiation` ends by itself. About 2.5 minutes. |
+
+The heartbeat is a subnet broadcast. On Linux/macOS `dcc_test.py` hears it on the
+wire; on Windows a second socket cannot share the example's port, so there it
+counts the example's own `TX ... (broadcast) ... I-Am` console lines (on Linux it
+checks both). Run them all:
 
 ```bash
 python3 tests/run_wire_tests.py --exe build/BACnetExampleBASC          # Linux/macOS
@@ -332,9 +406,7 @@ python tests\run_wire_tests.py --exe build\Release\BACnetExampleBASC.exe   # Win
 ```
 
 It ends with `ALL WIRE TESTS PASSED` (exit 0). CI runs it on Linux after the
-smoke test. [tests/README.md](tests/README.md) says what each check proves. It
-does not yet test commanding the outputs (step 5) or DeviceCommunicationControl
-(step 6).
+smoke test. [tests/README.md](tests/README.md) says what each check proves.
 
 
 ## The BACnet profile example series

@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - unreleased
+
+Profile-functional (series bar): the controller now performs the B-ASC Profile
+Function - ANSI/ASHRAE 135-2024 Annex L.4.3, "Ability to allow modification of
+some or all of its BACnet objects by another device" and "Ability to respond to
+communication control messages" - with something for communication control to
+silence, and shows Failure Modes. The BACnet Surface is unchanged (DS-RP-B,
+DS-WP-B, DM-DDB-B, DM-DOB-B, DM-DCC-B; the same eight objects).
+
+### Added
+
+- **I-Am heartbeat** (`main.cpp` section 2d, `HeartbeatTick()`): an unsolicited
+  I-Am broadcast every 5 s - I-Am is what DM-DDB-B has the device initiate. Under
+  DeviceCommunicationControl `disable-initiation` the stack refuses to send it
+  (cl. 16.1.2); `enable`, or the end of the request's time duration, resumes it.
+  Before, the example initiated nothing after its start-up I-Am, so
+  `disable-initiation` had no observable effect (audit, README overclaim).
+- **Actuator Simulation**, ported from B-SA-CPP 1.3.0 (`main.cpp` section 1b,
+  `ActuatorSimulationTick()`, labelled Simulation in the README): the outputs act
+  on the winning command (`ResolvedCommand()`, cl. 19.2) and the inputs report
+  it back. Analog Output 1 gains `Min_Pres_Value` 10.0 / `Max_Pres_Value` 30.0
+  (out-of-range setpoints get `value-out-of-range`; before, any REAL was
+  accepted) and `Reliability` (`no-output` while the simulated valve actuator is
+  disconnected through the test-only hook `CAS_EXAMPLE_TEST_ACTUATOR_FAULT_FILE`;
+  the stack derives `Status_Flags` FAULT from it).
+- **Wire Tests** `tests/dcc_test.py` (heartbeat runs; wrong / missing password
+  and deprecated `disable` refused; `disable-initiation` silences it while
+  ReadProperty, WriteProperty and Who-Is are answered; `enable` resumes; a
+  1-minute `disable-initiation` expires by itself), `tests/commanding_test.py`
+  and `tests/failure_modes_test.py` (as B-SA's), with `tests/basc_setup.py`.
+  Every check is mutation-verified (tests/README.md).
+
+### Changed
+
+- The up/down keys disturb the simulated temperature; the valve brings it back.
+- README: "What you can observe" rewritten (it said nothing was observable), the
+  scenario, the Simulation, the Wire Test table; TUTORIAL: driving real outputs,
+  reporting a fault, initiating under DCC; PICS: the Analog Output optional
+  properties, I-Am initiation, the objects' notes, Application_Software_Version
+  1.4.0.
+
 ## [1.3.0] - unreleased
 
 ### Fixed

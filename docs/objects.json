@@ -23,7 +23,7 @@
       "enabled": [],
       "writable": [],
       "accepted": ["Event_State"],
-      "note": "REAL, degrees Celsius; starts at 21.5; read-only"
+      "note": "REAL, degrees Celsius; read-only; the temperature the simulated heating valve produces - it moves up to 1.0 C a second toward the winning Analog Output 1 setpoint (starts at 21.5)"
     },
     {
       "type": "Binary Input",
@@ -33,7 +33,7 @@
       "enabled": [],
       "writable": [],
       "accepted": ["Event_State"],
-      "note": "starts inactive; read-only"
+      "note": "read-only; the simulated relay's feedback contact - takes the winning Binary Output 1 command within a second (starts inactive)"
     },
     {
       "type": "Multi-state Input",
@@ -43,17 +43,17 @@
       "enabled": ["State_Text"],
       "writable": [],
       "accepted": ["Event_State"],
-      "note": "state 1 of 3: On, Off, Auto; read-only"
+      "note": "3 states: On, Off, Auto; read-only; the simulated drive's speed - takes the winning Multi-State Output 1 command within a second"
     },
     {
       "type": "Analog Output",
       "instance": 1,
       "name": "Chartreuse",
-      "app": ["Object_Name", "Units", "Out_Of_Service", "Relinquish_Default"],
-      "enabled": [],
+      "app": ["Object_Name", "Units", "Out_Of_Service", "Relinquish_Default", "Min_Pres_Value", "Max_Pres_Value", "Reliability"],
+      "enabled": ["Min_Pres_Value", "Max_Pres_Value", "Reliability"],
       "writable": ["Present_Value"],
       "accepted": ["Event_State"],
-      "note": "REAL setpoint, default 20.0 C; commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyReal/GetPropertyBool"
+      "note": "REAL setpoint, default 20.0 C, accepts 10.0 .. 30.0 (Min_Pres_Value / Max_Pres_Value, else value-out-of-range); Reliability no-fault-detected, or no-output while the simulated valve actuator is disconnected (the stack derives Status_Flags FAULT from it); commandable via a 16-slot Priority_Array (WriteProperty, DS-WP-B) - Present_Value/Priority_Array/Current_Command_Priority are resolved by the stack from the slots the app serves through GetPropertyReal/GetPropertyBool"
     },
     {
       "type": "Binary Output",
