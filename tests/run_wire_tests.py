@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """Run every B-ASC Wire Test, one after another, and report one result.
 
-    python3 tests/run_wire_tests.py [--exe build/BACnetExampleBASC] [--port 47821]
+    python3 tests/run_wire_tests.py [--exe build/BACnetExampleBASC] [--port 47827]
 
 Exit code 0 = every check in every script passed.
 """
@@ -18,14 +18,14 @@ sys.path.insert(0, str(REPOSITORY))
 
 import wiretest  # noqa: E402  (the vendored harness at the repository root)
 
-SCRIPTS = ["discovery_test.py", "commanding_test.py", "failure_modes_test.py", "dcc_test.py"]
+SCRIPTS = ["discovery_test.py", "configuration_test.py", "commanding_test.py", "failure_modes_test.py", "dcc_test.py"]
 
 
 def main():
     arguments = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     arguments.add_argument("--exe", default=str(wiretest.default_exe(REPOSITORY, "BACnetExampleBASC")),
                            help="path to BACnetExampleBASC (default: build/BACnetExampleBASC)")
-    arguments.add_argument("--port", type=int, default=47821, help="the controller's UDP port (default 47821)")
+    arguments.add_argument("--port", type=int, default=47827, help="the controller's UDP port (default 47827)")
     args = arguments.parse_args()
 
     outcomes = []

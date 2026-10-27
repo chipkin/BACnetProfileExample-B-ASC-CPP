@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-ASC Wire Test: the actuator's Failure Modes - a disconnected actuator, and commands it must refuse.
 
-    python3 tests/failure_modes_test.py [--exe build/BACnetExampleBASC] [--port 47821]
+    python3 tests/failure_modes_test.py [--exe build/BACnetExampleBASC] [--port 47827]
 
 1. A disconnected valve actuator. ANSI/ASHRAE 135-2024 12.3.9: Reliability "provides
    an indication of whether the Present_Value or the operation of the physical output

@@ -62,7 +62,9 @@ plaintext and is a guard against accidents, not an attacker.
 **Change the device identity before you ship** - vendor ID, vendor name, model
 name, description, firmware revision, device name and the DCC password are all
 in the `CHANGE ALL OF THIS BEFORE YOU SHIP` block at the top of `main.cpp`,
-with a per-field note on each saying what to change it to. That block is the
+with a per-field note on each saying what to change it to. The device name there
+is only the default: each unit takes its own with `--deviceName` at start-up, as
+it takes its instance with `--deviceID`. That block is the
 authoritative checklist; it is in the source rather than here so it cannot be
 skipped by someone who only reads the code.
 
@@ -320,7 +322,7 @@ The example calls `Tick()` in a tight loop with a 1 ms sleep. What the stack act
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| On start-up the app prints a wall of red `Error:` lines but the device works | **Expected — this is not your bug.** Two benign sources, both from the stack's own debug logging: (1) the device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself; (2) a one-time *"UUID has not been set. A UUID must be set for the BACnetSC device to start."* — the stack starts a BACnet/SC (BACnet Secure Connect, the TLS/WebSocket-based transport added in ASHRAE 135-2020) datalink these IP-only examples never configure. It appears once and does not spam. How many red lines you see depends on subnet traffic: on a quiet network it can be a single line; on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. |
+| On start-up the app prints a few red `Error:` lines but the device works | **Expected — this is not your bug.** The device receives its **own** broadcast I-Am and logs a decode cascade (*"Services is not supported service=[0]"* … *"Failed to process the incoming NPDU"*) — any BACnet/IP device that listens for broadcasts hears itself. How many red lines you see depends on subnet traffic: on a quiet network there may be none or a single line; on a busy BACnet subnet the self-heard-broadcast decodes pile up into a wall. Either way the device is fine. (The one-time BACnet/SC "UUID has not been set" notice earlier versions printed no longer appears.) |
 | CMake error: *"CAS BACnet Stack adapter not found under: ..."* | Submodules not initialized. Run `git submodule update --init --recursive` (or pass `-D CAS_STACK_DIR=...`). |
 | `CASBACnetStackDLL.h: No such file or directory` | Same - submodules not checked out. |
 | Windows: *"No CMAKE_CXX_COMPILER could be found"* | Install Visual Studio with the "Desktop development with C++" workload, then re-run from a fresh terminal. |

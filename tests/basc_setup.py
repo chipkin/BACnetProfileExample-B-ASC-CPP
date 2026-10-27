@@ -59,7 +59,8 @@ PROPERTY_STATUS_FLAGS = 111
 NO_FAULT_DETECTED, NO_OUTPUT = 0, 6
 STATUS_FLAGS_NORMAL = [False, False, False, False]
 STATUS_FLAGS_FAULT = [False, True, False, False]
-ERROR_CLASS_PROPERTY = 2
+ERROR_CLASS_OBJECT, ERROR_CLASS_PROPERTY = 1, 2
+ERROR_CODE_UNKNOWN_OBJECT = 31
 ERROR_CODE_VALUE_OUT_OF_RANGE, ERROR_CODE_WRITE_ACCESS_DENIED = 37, 40
 
 
@@ -67,8 +68,8 @@ def parser(description):
     arguments = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     arguments.add_argument("--exe", default=str(wiretest.default_exe(REPOSITORY, "BACnetExampleBASC")),
                            help="path to BACnetExampleBASC (default: build/BACnetExampleBASC)")
-    arguments.add_argument("--port", type=int, default=47821,
-                           help="the controller's UDP port (default 47821)")
+    arguments.add_argument("--port", type=int, default=47827,
+                           help="the controller's UDP port (default 47827)")
     return arguments
 
 

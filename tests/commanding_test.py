@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-ASC Wire Test: a commanded output does what the winning command says (DS-WP-B, cl. 19).
 
-    python3 tests/commanding_test.py [--exe build/BACnetExampleBASC] [--port 47821]
+    python3 tests/commanding_test.py [--exe build/BACnetExampleBASC] [--port 47827]
 
 ANSI/ASHRAE 135-2024 Annex L.4.3, Data Sharing, as for a B-SA: "Ability to allow
 modification of some or all of its BACnet objects by another device". A controller

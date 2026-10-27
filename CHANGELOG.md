@@ -5,402 +5,143 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] - unreleased
+## [Unreleased]
 
-Profile-functional (series bar): the controller now performs the B-ASC Profile
-Function - ANSI/ASHRAE 135-2024 Annex L.4.3, "Ability to allow modification of
-some or all of its BACnet objects by another device" and "Ability to respond to
-communication control messages" - with something for communication control to
-silence, and shows Failure Modes. The BACnet Surface is unchanged (DS-RP-B,
-DS-WP-B, DM-DDB-B, DM-DOB-B, DM-DCC-B; the same eight objects).
+_No changes yet._
+
+## [1.5.0] - 2026-10-27
+
+Built on CAS BACnet Stack 6.x (`69b6249f`).
 
 ### Added
 
-- **I-Am heartbeat** (`main.cpp` section 2d, `HeartbeatTick()`): an unsolicited
-  I-Am broadcast every 5 s - I-Am is what DM-DDB-B has the device initiate. Under
-  DeviceCommunicationControl `disable-initiation` the stack refuses to send it
-  (cl. 16.1.2); `enable`, or the end of the request's time duration, resumes it.
-  Before, the example initiated nothing after its start-up I-Am, so
-  `disable-initiation` had no observable effect (audit, README overclaim).
-- **Actuator Simulation**, ported from B-SA-CPP 1.3.0 (`main.cpp` section 1b,
-  `ActuatorSimulationTick()`, labelled Simulation in the README): the outputs act
-  on the winning command (`ResolvedCommand()`, cl. 19.2) and the inputs report
-  it back. Analog Output 1 gains `Min_Pres_Value` 10.0 / `Max_Pres_Value` 30.0
-  (out-of-range setpoints get `value-out-of-range`; before, any REAL was
-  accepted) and `Reliability` (`no-output` while the simulated valve actuator is
-  disconnected through the test-only hook `CAS_EXAMPLE_TEST_ACTUATOR_FAULT_FILE`;
-  the stack derives `Status_Flags` FAULT from it).
-- **Wire Tests** `tests/dcc_test.py` (heartbeat runs; wrong / missing password
-  and deprecated `disable` refused; `disable-initiation` silences it while
-  ReadProperty, WriteProperty and Who-Is are answered; `enable` resumes; a
-  1-minute `disable-initiation` expires by itself), `tests/commanding_test.py`
-  and `tests/failure_modes_test.py` (as B-SA's), with `tests/basc_setup.py`.
-  Every check is mutation-verified (tests/README.md).
+- **`--deviceName <text>`** sets the Device's Object_Name at start-up, like
+  `--deviceID` sets its instance, so two units can be installed together (BACnet
+  requires both to be configurable, cl. 12.1.1.3 and 12.1.1.4). The default is
+  unchanged (`Chipkin Example B-ASC`). A name must be 1 to 255 bytes with no control
+  characters, otherwise the example warns and keeps the default. The name is not
+  writable over the network.
 
 ### Changed
 
+- **`--xml` works.** The help listed it but the example never read it; each received
+  and sent frame now prints as an XML block.
+- Vendored `common/` updated to 3.5.0 (adds an optional `--deviceName` help line).
+- The self-tests' default `--port` is 47827, this example's own port in the series.
+- The PICS objects-and-properties block cites the CAS BACnet Stack's property
+  profiles; no row changed.
+
+### Fixed
+
+- **Requests no longer go unanswered on Windows**: a request arriving just as the UDP
+  receive timed out was silently dropped.
+- **PICS: `Database_Revision` is 8**, not a stack default of 0. The stack counts the
+  objects added at start-up (cl. 12.11).
+
+## [1.4.0] - 2026-10-16
+
+Built on CAS BACnet Stack 6.x (`64b2cfac5`, 6.0.23), Protocol_Revision 30. Includes
+the changes first developed as 1.2.1 to 1.3.0.
+
+The example now performs the B-ASC Profile Function (ANSI/ASHRAE 135-2024 Annex L.4.3):
+it allows other devices to modify its objects and responds to communication control
+messages, with something for communication control to silence. The BACnet Surface is
+unchanged (DS-RP-B, DS-WP-B, DM-DDB-B, DM-DOB-B, DM-DCC-B; the same eight objects).
+
+### Added
+
+- **I-Am heartbeat**: an unsolicited I-Am broadcast every 5 s. DeviceCommunicationControl
+  `disable-initiation` stops it (cl. 16.1.2); `enable`, or the end of the time duration,
+  resumes it.
+- **Actuator simulation**: the outputs act on the winning command and the inputs report
+  it back. Analog Output 1 has `Min_Pres_Value` 10.0 and `Max_Pres_Value` 30.0 (out of
+  range setpoints get `value-out-of-range`) and `Reliability` (`no-output` while the
+  simulated valve actuator is disconnected).
+- **Segmentation is supported** (`segmented-both`, `Max_Segments_Accepted` 16).
+- Automated self-tests under `tests/` (`run_wire_tests.py`), which also run in CI.
+- New documents: `TUTORIAL.md` (extending and reviewing the example) and
+  `docs/PICS.md` (the conformance statement).
+
+### Changed
+
+- **The Device is now named "Chipkin Example B-ASC"** (was "Rainbow") so examples on one
+  network can be told apart.
+- **Protocol_Revision is 30** (was 24).
 - The up/down keys disturb the simulated temperature; the valve brings it back.
-- README: "What you can observe" rewritten (it said nothing was observable), the
-  scenario, the Simulation, the Wire Test table; TUTORIAL: driving real outputs,
-  reporting a fault, initiating under DCC; PICS: the Analog Output optional
-  properties, I-Am initiation, the objects' notes, Application_Software_Version
-  1.4.0.
-- Wire Tests use the shared `wiretest/` 0.7.0: the Peer is `wiretest.Client(retries=3, timeout=0.6)`; `dcc_test.py`'s heartbeat counter, DeviceCommunicationControl call and Who-Is are `wiretest.IAmBroadcasts`, `Client.device_communication_control` and `Client.who_is`.
-
-## [1.3.0] - unreleased
+- Build documentation uses the adapter's default source mode: `cmake -B build -S .`
+  then `cmake --build build --config Release`, on every platform. If you have an older
+  build tree, run `cmake -B build` again.
+- README and PICS describe what can be observed, the simulation and the self-tests.
+- `common/` updated to 3.4.0: a broadcast addressed to the socket's own address is sent
+  to the subnet broadcast.
 
 ### Fixed
 
-- **`--dcc-password` was advertised but ignored.** `--help` (from `common/`)
-  listed `--dcc-password <string>`, but `main.cpp` never read it and compared
-  against a compile-time empty `DCC_PASSWORD`, so the password Failure Mode
-  needed a recompile. `main.cpp` now reads it with
-  `CASExampleHelper::ParseDccPasswordArg()` into `g_dccPassword` (default empty,
-  `DEFAULT_DCC_PASSWORD`) and prints `FYI: DeviceCommunicationControl requires a
-  password (--dcc-password).` at start-up when one is set (never the password).
-  Checked on the wire at the new pin (Windows): with `--dcc-password s3cret`, a
-  `disable-initiation` with the wrong password or none gets Error class 4 code 26
-  (`security` / `password-failure`), with `s3cret` a SimpleACK; the deprecated
-  `disable` gets Error class 5 code 29 (`services` / `service-request-denied`);
-  with no `--dcc-password`, any password is SimpleACKed.
-- **README said the example "demonstrates exactly" disable-initiation** ("keeps
-  answering reads but stops initiating"). The example initiates nothing after
-  its start-up I-Am, and 135-2024 clause 16.1.2 still lets a device send I-Am /
-  I-Have in answer to Who-Is / Who-Has, so nothing observable changes. README,
-  PICS and AGENTS.md now say so.
-
-### Changed
-
-- **Stack Pin moved to `6.x` @ `64b2cfac5` (CAS BACnet Stack 6.0.23)** from
-  `6.x` @ `abd4cee1` (6.0.21), per the series rule that a pin moves to the latest
-  `6.x` whenever an example is updated. No API change needed.
-- **`common/` 3.0.0 -> 3.3.0**, copied verbatim from B-SS-CPP `b640a81`. Additive
-  for this example: four new keys it does not handle (`k`, `o`, `f`, `p` are
-  ignored) and `HelperSendMessage` now sends a broadcast the stack hands it with
-  no address.
-- **Protocol_Revision 24 -> 30** (the stack's default at the new pin): README,
-  AGENTS.md, PICS, `main.cpp` comments. The deprecated-`disable` rejection is
-  unchanged at 30.
-- **Segmentation is now supported** (`segmented-both`, `Max_Segments_Accepted`
-  16, `APDU_Segment_Timeout` 5000 ms): the stack's customer build compiles
-  segmentation in from this pin (stack #2992). `docs/PICS.md` section 5 updated;
-  section 11 regenerated.
-- README, PICS and version lines: stack 6.0.23, `common/` 3.3.0,
-  Protocol_Revision 30, example 1.3.0 (the README still said 1.2.0 and
-  `common/` 2.5.0). Sample output shows the `- Unconfirmed: I-Am` suffix
-  `common/` prints. Series profile table re-synced. APP_VERSION 1.2.2 -> 1.3.0
-  (minor: `--dcc-password` changes behaviour).
-- **`common/` 3.3.0 -> 3.4.0**, copied verbatim from B-SS-CPP `5d78299`:
-  `HelperSendMessage` now sends a broadcast the stack addresses to this device's
-  own socket to the subnet broadcast, instead of unicasting it back to itself
-  (stack #3933). No change in this example's Wire Test results.
-- **`wiretest/` 0.5.0 -> 0.6.0**, copied verbatim from B-LS-CPP. Backward
-  compatible: it adds codec helpers and the `peer`, `alarm`, `workstation` and
-  `wait` modules this example does not use yet.
-- **The discovery Wire Test retries its Who-Is once**, printing a visible
-  `[RETRY]` line, when no I-Am comes back in 3 s. Who-Is is unconfirmed, so
-  nothing else retries it, and the example's UDP receive can drop a datagram on
-  Windows.
-
-### Added
-
-- **Wire Tests** (`tests/`, README "Wire Tests"): `tests/discovery_test.py`
-  (copied from B-SS-CPP `da3e96f`, object list adapted) does what a client's
-  discovery does - Who-Is, the Device's `Object_List` (control: exactly the eight
-  objects), then every object's `Property_List` and a ReadProperty of every listed
-  property - and fails on any Error, Reject, Abort or silence.
-  `tests/run_wire_tests.py` runs it; CI runs it on Linux after the smoke test.
-  Passes 14/14 (114 reads) on Windows and Linux at the new pin.
-- `wiretest/` 0.5.0, the series' shared Wiretest Harness, vendored verbatim
-  from B-BBMD-CPP.
-
-## [1.2.2] - unreleased
-
-### Changed
-
-- **Device renamed from the series' colour placeholder "Rainbow" to "Chipkin
-  Example B-ASC"** so devices from different examples in the series are
-  distinguishable from each other on the same BACnet network - every example
-  previously announced the identical Object_Name "Rainbow", which made two
-  examples on one subnet indistinguishable by name. Sub-object names (Analog
-  Input 1 "Bronze", etc.) are unchanged - only the Device object's name
-  changed. `docs/colour-table.md` (series root) updated to match. APP_VERSION
-  bumped 1.2.1 -> 1.2.2.
-
-## [1.2.1] - unreleased
-
-### Fixed
-
-- **`Application_Software_Version` (12) and `Firmware_Revision` (44) were
-  hardcoded and stale** - both properties were served from `static const
-  char*` constants (`APPLICATION_SOFTWARE_VERSION` / `FIRMWARE_REVISION`)
-  literally set to `"1.0.0"` in the `CHANGE ALL OF THIS BEFORE YOU SHIP`
-  block, unrelated to `APP_VERSION` ("1.2.1") or the linked CAS BACnet Stack
-  (6.0.21.0) and never updated across releases. Fixed: `Application_Software_
-  Version` now reads `APP_VERSION` directly (one source of truth, can't drift
-  from `--version`'s own banner again) and the separate stale constant is
-  gone. `Firmware_Revision` is now built at runtime from the CAS BACnet
-  Stack's own `BACnetStack_GetAPIMajorVersion()`/`GetAPIMinorVersion()`/
-  `GetAPIPatchVersion()`/`GetAPIBuildVersion()` (the same 4 calls
-  `common/CASExampleHelper.cpp`'s `PrintVersion()` already uses for the
-  startup banner) into `static std::string g_firmwareRevision`, populated
-  once right after `LoadBACnetFunctions()` succeeds in `main()` (these
-  getters need the stack loaded first). Verified with a clean SOURCE-mode
-  Release build and `--version`, which reports `CAS BACnet Stack version:
-  6.0.21.0` via the same 4 getters `g_firmwareRevision` now uses - a live
-  ReadProperty against the running device was attempted with `bacpypes3`
-  but did not get a response in a reasonable time, so this fix is verified
-  by build + code review rather than an on-the-wire read.
-
-### Changed — documentation restructure, SOURCE link
-
-- **README.md cut down to this example only.** Removed the series "start
-  here" framing, the generic device-profile explainer, the "What the profile
-  requires" prose (the BIBBs table already said this), "Before you ship" (its
-  per-field guidance moved into code comments in `main.cpp`, see below), "Get
-  the code", "Link mode", "Troubleshooting", "Extending the example", and
-  "Objects and properties" (now generated into `docs/PICS.md` instead).
-  Added a prebuilt-binary release link and pointers to the two new documents
-  near the top.
-- **`TUTORIAL.md` added** - the extending/reviewing material that used to
-  bloat the README: the "Add a second analog input" silent-failure walk-through,
-  what each object type (including the three commandable outputs) needs the
-  app to serve, a Served-by breakdown for both a plain object (Analog Input 1)
-  and a commandable one (Analog Output 1), the DeviceCommunicationControl
-  `*errorCode` contract, "Reviewing your device", "Using this example as the
-  base for a real product" (what to copy out of `common/`, calling
-  `BACnetStack_Tick()` correctly), and Troubleshooting.
-- **`docs/PICS.md` added** - an ANSI/ASHRAE 135 Annex A format Protocol
-  Implementation Conformance Statement, with the objects-and-properties table
-  generated from `docs/objects.json` (`tools/gen-objects-properties.py`,
-  zero ⚠ rows).
-- **`docs/objects.json`'s Device entry gained a `stack` list** separate from
-  `accepted`, matching the shape the rest of the series uses: `Object_List`,
-  `Protocol_Version`, `Protocol_Revision`, `Protocol_Services_Supported`,
-  `Protocol_Object_Types_Supported` and `Device_Address_Binding` are
-  device-wide facts the stack computes (rendered as plain `stack`, not `stack
-  default, accepted`); `accepted` now holds only the stack's configured
-  defaults this example does not override (`System_Status`,
-  `Max_APDU_Length_Accepted`, `Segmentation_Supported`, `APDU_Timeout`,
-  `Number_Of_APDU_Retries`, `Database_Revision`).
-- **Build switched from a prebuilt STATIC library to the adapter's default
-  SOURCE mode**: `cmake -B build -S .` / `cmake --build build --config
-  Release` compiles the stack straight into the executable, with no
-  `tools/build-stack-static.sh` pre-step and no `-DCAS_BACNET_STACK_LINK=...`
-  flag. `CMakeLists.txt`'s header comment, `AGENTS.md`, and
-  `.github/workflows/release.yml` (drops the static-library cache/build steps
-  and the matrix `lib:` entries, asserts `CAS_BACNET_STACK_LINK=SOURCE`, sets
-  `"link_mode": "SOURCE"` in the published metrics JSON, and packages
-  `TUTORIAL.md` / `docs/PICS.md` alongside the binaries) now match.
-- **`main.cpp`'s `CHANGE ALL OF THIS BEFORE YOU SHIP` block absorbed the
-  README's "Before you ship" table** as per-field comments, including the
-  `DEVICE_NAME` internetwork-uniqueness warning and the DCC password
-  plaintext-on-the-wire note.
-- **Footprint table left as-is with a refresh note added**: the published
-  v1.2.0 numbers were measured from a STATIC-linked binary; the next release
-  refreshes them from the SOURCE-mode build now documented.
-- Corrected the README's "Expected output" sample, which had dropped the
-  `(Network Port 1)` suffix the binary actually prints on the `Listening for
-  BACnet/IP` and start-up `TX` lines.
+- **`--dcc-password` was advertised but ignored.** It is now read, and a start-up line
+  says a password is required (never the password itself). With a password set, a wrong
+  or missing one gets `password-failure`; the deprecated `disable` gets
+  `service-request-denied`.
+- **README overclaimed `disable-initiation`.** Per cl. 16.1.2 a device may still answer
+  Who-Is and Who-Has, so README and PICS now say what is observable.
+- **`Application_Software_Version` and `Firmware_Revision` were hardcoded** to "1.0.0";
+  they now report the build's version and the CAS BACnet Stack version.
 
 ## [1.2.0] - 2026-09-15
 
-### Changed — STATIC link, generated README blocks
-
-- **Stack re-pinned to `6.x` @ `abd4cee1` (reports itself as 6.0.21), tracking the
-  `6.x` branch** (`.gitmodules` `branch = 6.x`), up from `6.x-TestTool` @
-  `756371c1`.
-- **Links the CAS BACnet Stack as a prebuilt STATIC library**
-  (`CAS_BACNET_STACK_LINK=STATIC`, built by `tools/build-stack-static.sh` from the
-  stack's own project files) instead of compiling the stack from `source/` into
-  this project. `CMakeLists.txt`, the README "Link mode" section and
-  `AGENTS.md` now describe STATIC only; the adapter's SOURCE mode gets one
-  line noting it exists. No DLL mode is documented or shipped.
-- **`.github/workflows/release.yml` rewritten**: builds the STATIC library (cached
-  on the submodule SHA), asserts `CAS_BACNET_STACK_LINK=STATIC` from
-  `CMakeCache.txt`, and publishes `metrics-windows.json` / `metrics-linux.json`
-  (binary size, SHA-256 prefix, start-up time to `ready`, stack commit, link
-  mode, compiler) as release assets alongside the binaries.
-- **README gained three generated/filled sections**: `## Objects and properties`
-  (from `docs/objects.json` via `tools/gen-objects-properties.py`), `## The
-  BACnet profile example series` (the series profile table, via
-  `tools/sync-profile-table.sh`), and `## Footprint` (filled from
-  `metrics-*.json` at release; currently the placeholder row).
-
-### Changed — updated to the current CAS BACnet Stack interface
-
-Three interface changes reach this example versus the prior `6.x-TestTool` pin
-`756371c1`; the full list, with before/after signatures, is on cas-bacnet-stack
-issue #1641.
-
-- **Every `GetProperty*` callback gained a trailing `uint32_t* errorCode`**
-  (stack issue #974). The stack presets it to `success` and reads it only on a
-  `false` return, so a declining callback can now name the BACnet error the
-  client receives. `main.cpp` uses it in exactly one place — `State_Text` with an
-  out-of-range array index now answers `Error(property, invalid-array-index)`
-  instead of an empty string — and deliberately leaves it alone on every
-  catch-all `return false`, because the stack's decline-and-fabricate fallback is
-  what answers required properties this application does not serve (the Device's
-  `Max_APDU_Length_Accepted`, `APDU_Timeout` and `Number_Of_APDU_Retries`). The
-  `DeviceCommunicationControl` callback is the one place in this file where
-  `*errorCode` has no fallback and must be set on every `false` return, as its
-  commentary explains.
-- **`BACnetStack_AddNetworkPortObjectWithNetworkNumber()` is gone**, folded into
-  `BACnetStack_AddNetworkPortObject()`, which now always takes the network number
-  and its quality. Same arguments, one function.
-- **Links are identified by Network Port object instance, not network type**
-  (stack issues #822/#556) — the transport callbacks and `SendIAm` all changed.
-  Handled in `common/`; `main.cpp` calls the new
-  `CASExampleHelper::SetNetworkPortInstance()` before
-  `RegisterCommonCallbacks()`.
-
-`common/` is replaced wholesale with the series-wide vendored copy at **2.1.0**
-(up from `1.5.1`; see `common/CHANGELOG.md` for its full history) — identical
-byte-for-byte across every example in the series.
-
-### Verified
-
-Built on Windows/MSVC (STATIC link) and exercised against a BACnet client:
-Who-Is → I-Am (device 389003, vendor 389); ReadProperty of every required
-property of all eight objects returns the expected value, `Protocol_Revision`
-is 24 and `Object_List` lists all eight; WriteProperty to each commandable
-output at two priorities followed by a NULL relinquish falls back correctly to
-`Relinquish_Default`; DeviceCommunicationControl accepts `enable` and
-`disable-initiation`, rejects the deprecated plain `disable` with
-`service-request-denied`, and (with `DCC_PASSWORD` set) rejects a wrong
-password with `password-failure`.
-
-## [1.1.0] - unreleased
-
-> Not tagged yet: `v1.0.0` is the only tag in this repository, so there is no
-> 1.1.0 build. `release.yml` publishes binaries on a `v*.*.*` tag; until that tag
-> exists this section describes what is on the branch, not what shipped.
+Built on CAS BACnet Stack 6.x (`abd4cee1`, 6.0.21). Includes the changes first developed
+as 1.1.0.
 
 ### Added
 
-- **DM-DOB-B (Who-Has / I-Have) is now advertised.** The device always answered
-  Who-Has, but `Protocol_Services_Supported` is emitted verbatim from the stack's
-  service bitstring, whose defaults are Who-Is + Who-Has + ReadProperty only -
-  `I-Am` and `I-Have` stay false. So the device performed both and told every
-  client it supported neither. Who-Is/I-Am (DM-DDB-B) and Who-Has/I-Have are now
-  enabled explicitly, which is what makes the README's BIBB claims true on the
-  wire.
-- **`Description` on the Device object is now readable.** It was served from a
-  Get callback but never enabled. `Description` is OPTIONAL on a Device, and the
-  stack checks `IsPropertyEnabled` before reaching the callbacks - so the branch
-  was dead code and a client got `unknown-property`.
-- **`Units` on the Analog Output.** Required on an Analog Output as well as an
-  Analog Input; only the input's was served. This does not error - the stack
-  silently substitutes `no-units(95)` - so the setpoint reported no engineering
-  units next to a degC sensor.
-- `--help` / `--version` (via `common/` v1.2.0); `--version` prints the example,
-  stack, and helper versions.
-- A real "add a second analog input" recipe, a per-object-type checklist of what
-  the application must serve, and a who-serves-what table.
+- **Who-Has / I-Have (DM-DOB-B) is advertised.** The device always answered Who-Has but
+  `Protocol_Services_Supported` said it did not. Who-Is/I-Am and Who-Has/I-Have are now
+  reported.
+- **`Description` on the Device is readable** (was `unknown-property`).
+- **`Units` on the Analog Output** is served (the stack was substituting `no-units`).
+- `--help` and `--version`.
+- A recipe for adding a second analog input, a per-object-type checklist and a table of
+  what the application must serve.
+- README sections for the objects and properties, the example series and the footprint;
+  releases publish `metrics-windows.json` and `metrics-linux.json` (binary size,
+  start-up time, stack commit).
 
 ### Changed
 
-- **Links the CAS BACnet Stack through the `CASBACnetStack::Adapter` CMake
-  target instead of hand-globbing the stack's `source/*.cpp`.** `main.cpp` and
-  `common/CASExampleHelper.cpp` now include `CASBACnetStackAdapter.h` and call
-  `LoadBACnetFunctions()` once at the top of `main()`; every `BACnetStack_*`
-  call site is otherwise unchanged. `CAS_BACNET_STACK_LINK` (`SOURCE` default,
-  or `STATIC`/`DLL`) picks the link mode — see the README's new "Link modes"
-  section. **All three modes are verified**: `SOURCE` and `STATIC` build and run
-  against a live client, and `DLL` mode now loads the stack, binds all 213
-  exports, passes the version handshake and runs — plus both of its failure
-  paths (library absent; library present but missing an export) report a
-  readable error and exit cleanly rather than crashing.
-  The stack submodule is pinned to `6.x-TestTool` @ `756371c1`, which carries the
-  adapter work merged as cas-bacnet-stack PRs #267 and #268.
-  common/ bumped to v1.5.1 (see `common/CHANGELOG.md`) — this is a contract
-  change every example in the series needs when it re-syncs.
-- **Documentation corrections from a five-persona review** (lead developer,
-  educator, junior developer, BACnet newcomer, staff architect): the version
-  banner and sample output now match the shipped `common/` version (they claimed
-  v1.3.0 against a v1.5.0 tree — in a project whose own docs teach "the printed
-  versions are how you detect drift"); the BIBB `-A`/`-B` suffix convention,
-  `Protocol_Revision`, BACnet/SC and "BACnet internetwork" are now defined at
-  first use; the Verify section is clearer about what to check; and two new
-  sections cover what in `common/` is demo-only
-  versus production-worthy, and the `BACnetStack_Tick()` cadence and
-  single-threading contract.
-- **Stack pin moved to `6.x-TestTool` @ `b681f58d` (2026-07-31).** 38 commits
-  ahead of the previous pin (`92c91d74`); includes the removal of the 13
-  `RegisterHookProperty*` exports, the `DecodeAsXML`/`DecodeAsJSON` →
-  `DecodeAs` fold, the `SetCOVMultipleSettings` rename, the
-  `SetBackupAndRestoreEnabled` signature change (absorbs
-  `backupFailureTimeout`), and the removal of `SetObjectTypeSupported` — none
-  of which this example calls. Known cosmetic side effect: the newly merged
-  BACnet/SC datalink logs a one-time "UUID has not been set" error on the
-  debug callback at start-up in applications that never configure BACnet/SC;
-  it latches its error flag and goes quiet. Functionality is unaffected.
-- **Stack pin moved to the series `6.x` branch (CAS BACnet Stack 6.0.0.0).**
-  Which stack version this example requires is a material licensing fact.
-- The commandable-setup loop carries `{type, instance}` pairs instead of a
-  hardcoded instance `1`, and its comment now states the truth: those calls are
-  a no-op for Analog/Binary/Multi-State Output (the stack treats those as
-  commandable unconditionally) and are load-bearing only for the optionally-
-  commandable Value types.
-- The WriteProperty log prints the real object instance.
+- **The stack is linked through the `CASBACnetStack::Adapter` CMake target** instead of
+  globbing the stack sources. `CAS_BACNET_STACK_LINK` selects `SOURCE`, `STATIC` or `DLL`
+  mode.
+- **Every `GetProperty*` callback gained a trailing `uint32_t* errorCode`**, so a
+  callback that declines can name the BACnet error. `State_Text` with an out of range
+  array index now returns `invalid-array-index`.
+- `BACnetStack_AddNetworkPortObjectWithNetworkNumber()` is folded into
+  `BACnetStack_AddNetworkPortObject()`; links are identified by Network Port object
+  instance. `common/` is updated to 2.1.0.
+- Documentation corrections: version banner and sample output match the shipped
+  `common/`, terms defined at first use, and new sections on demo-only code in `common/`
+  and the `BACnetStack_Tick()` contract.
 
 ### Fixed
 
-- **DeviceCommunicationControl returned `false` with `*errorCode` unset** when
-  the request targeted a different device instance, putting
-  `Error Code = success(84)` on the wire.
-
-- **Default device instance is now `389003`, not `389001`.** The series
-  device-instance allocation assigns each profile its own default so that several
-  examples can run on one subnet (B-SS `389001`, B-SA `389002`, B-ASC `389003`,
-  ...); this example shipped using `389001`, which is **B-SS's** instance. Any
-  two of B-SS / B-ASC running together therefore both claimed device `389001` —
-  duplicate device instances on a subnet are a BACnet conformance problem, and
-  they make discovery ambiguous in exactly the way that is hardest to debug (see
-  the SO_REUSEADDR note in the series runbook). `--deviceID` still overrides, as
-  BACnet requires.
+- **The default device instance is now 389003**, not 389001, which belongs to B-SS.
+  Two examples on one subnet no longer claim the same instance. `--deviceID` still
+  overrides.
+- DeviceCommunicationControl returned an unset error code when the request targeted a
+  different device instance.
 
 ## [1.0.0] - 2026-06-16
 
 ### Added
 
-- Initial **B-ASC (BACnet Application Specific Controller)** profile example for
-  the CAS BACnet Stack in C++.
-- **Device** object "Rainbow" - default instance `389001`, vendor `389` (Chipkin
-  Automation Systems) - with its full identity (name, description, vendor, model,
-  firmware, application software version).
-- Read-only sensor objects (the shared minimum across the example series):
-  **Analog Input 1** "Bronze" (REAL, degrees Celsius, starts at 21.5), **Binary
-  Input 1** "Emerald" (active/inactive), **Multi-State Input 1** "Hot Pink"
-  (state 1..3, with `State_Text` "On"/"Off"/"Auto").
-- Commandable **output** objects: **Analog Output 1** "Chartreuse" (REAL setpoint),
-  **Binary Output 1** "Fuchsia" (active/inactive), **Multi-State Output 1**
-  "Indigo" (state 1..3). Each is driven through a 16-slot `Priority_Array` +
-  `Relinquish_Default`; the stack resolves `Present_Value`. Writes to read-only
-  inputs, and out-of-range values, are rejected.
-- **DeviceCommunicationControl** (DM-DCC-B): a management station can stop or
-  resume the device's communication, optionally for a time duration and optionally
-  behind a password. The callback validates the password (`DCC_PASSWORD`, empty by
-  default = accept any) and the stack runs the enable/disable state machine. Notes
-  that the deprecated plain `disable` value returns `service-request-denied` at
-  Protocol_Revision >= 20 (use `disable-initiation`).
-- **Network Port 1** "Vermilion" with full BACnet/IP addressing - `IP_Address`,
-  `IP_Subnet_Mask`, `IP_Default_Gateway`, `BACnet_IP_UDP_Port`, `BACnet_IP_Mode`;
-  `MAC_Address` is computed by the stack from the IP address and UDP port.
-- **DS-RP-B** (ReadProperty) + **DS-WP-B** (WriteProperty) + **DM-DCC-B**
-  (DeviceCommunicationControl), plus automatic **Who-Is / I-Am** discovery; an
-  unsolicited I-Am is broadcast to the local subnet on start-up.
-- All **required properties for Protocol_Revision 24** across every object.
-- Interactive keys: `h` help, `q` quit, up/down nudge Analog Input 1 by +/-1.1.
-- Command-line options: `--port <n>` and `--deviceID <n>`.
-- Cross-platform CMake build that compiles the CAS BACnet Stack from source, with
-  strict warnings (`-Wall -Wextra` / `/W4`) on the example's own sources only.
-- Self-contained repository: the shared helper is vendored in `common/`, and the
-  CAS BACnet Stack is included as a git submodule at
-  `submodules/cas-bacnet-stack` - clone with `--recursive` and build.
-- GitHub Actions workflow that builds Windows + Linux and publishes a release on
-  a `vX.Y.Z` tag, with a smoke-test step before packaging.
-
-[1.2.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
-[1.1.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/chipkin/BACnetProfileExample-B-ASC-CPP/releases/tag/v1.0.0
+- Initial **B-ASC (BACnet Application Specific Controller)** profile example for the CAS
+  BACnet Stack in C++.
+- **Device** object with its full identity, and Network Port 1 with BACnet/IP addressing.
+- Read-only sensor objects: Analog Input 1, Binary Input 1, Multi-State Input 1.
+- Commandable outputs: Analog Output 1, Binary Output 1, Multi-State Output 1, each with
+  a 16-slot `Priority_Array` and `Relinquish_Default`.
+- DS-RP-B, DS-WP-B, DM-DCC-B (with optional password; the deprecated plain `disable`
+  returns `service-request-denied`), and Who-Is / I-Am discovery.
+- All required properties for Protocol_Revision 24 on every object.
+- Interactive keys (`h`, `q`, up/down) and the options `--port` and `--deviceID`.
+- Cross-platform CMake build, with the CAS BACnet Stack as a git submodule (clone with
+  `--recursive`), and a GitHub Actions workflow that builds Windows and Linux and
+  publishes a release on a `vX.Y.Z` tag.

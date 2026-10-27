@@ -21,9 +21,9 @@ as a **fault**. The valve, relay and drive are a
 - **[docs/PICS.md](docs/PICS.md)** - the Protocol Implementation Conformance
   Statement: every object, every property, and who answers it.
 
-> **Versions:** this document describes **example v1.4.0**, built and verified
-> against **CAS BACnet Stack 6.0.23** (`6.x` @ `64b2cfac5`), at
-> **Protocol_Revision 30**, with the vendored `common/` helper at **v3.4.0**.
+> **Versions:** this document describes **example v1.5.0**, built and verified
+> against **CAS BACnet Stack 6.0.23** (`6.x` @ `69b6249f`), at
+> **Protocol_Revision 30**, with the vendored `common/` helper at **v3.5.0**.
 > Running the example prints all three - if what it prints disagrees with this
 > line, trust the program and check `CHANGELOG.md`.
 >
@@ -294,9 +294,9 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-ASC (Application Specific Controller) Example - C++ v1.4.0
+BACnet B-ASC (Application Specific Controller) Example - C++ v1.5.0
 CAS BACnet Stack version: 6.0.23.0
-Common helper (common/) version: 3.4.0
+Common helper (common/) version: 3.5.0
 FYI: Listening for BACnet/IP on UDP port 47808 (Network Port 1).
 TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1) - Unconfirmed: I-Am
 FYI: Device 389003 ("Chipkin Example B-ASC") ready. Vendor ID 389. Press 'h' for help.
@@ -316,10 +316,10 @@ disable-initiation (keep responding) (indefinitely)`.
 The device listens on UDP **47808** (BACnet/IP). Allow that port through your
 firewall. To use a different port, pass `--port` (see below).
 
-> **A wall of red `Error:` lines at start-up is expected and is not your bug** -
-> it is the stack's own debug logging (the device hearing its own broadcast I-Am,
-> and a one-time BACnet/SC UUID notice). [TUTORIAL.md](TUTORIAL.md#troubleshooting)
-> explains both.
+> **A few red `Error:` lines at start-up are expected and are not your bug** -
+> it is the stack's own debug logging of the device hearing its own broadcast
+> I-Am (on a quiet network there may be none). [TUTORIAL.md](TUTORIAL.md#troubleshooting)
+> explains it.
 
 ### Command-line options
 
@@ -327,7 +327,9 @@ firewall. To use a different port, pass `--port` (see below).
 |--------|---------|---------|
 | `--port <n>` | `47808` | UDP port to listen on (BACnet/IP). |
 | `--deviceID <n>` | `389003` | The device's BACnet instance number (BACnet requires this to be configurable). |
+| `--deviceName <text>` | `Chipkin Example B-ASC` | The Device object's `Object_Name`, 1..255 bytes, no control characters. It must be unique across the BACnet internetwork, so give every unit its own (BACnet requires it to be configurable, like the instance). An invalid value prints a warning and keeps the default. |
 | `--dcc-password <string>` | none | Require this password on DeviceCommunicationControl. Prints `FYI: DeviceCommunicationControl requires a password` at start-up (never the password). |
+| `--xml` | off | Print every received and sent BACnet message as an indented XML block instead of a one-line summary (very verbose; for protocol debugging). |
 | `--help`, `-h` | - | Show usage and exit. |
 | `--version` | - | Print the example, stack, and `common/` helper versions, then exit. |
 
@@ -391,6 +393,7 @@ example over BACnet/IP from outside it. Python 3 standard library only.
 | Script | What it proves |
 |---|---|
 | `discovery_test.py` | Who-Is, the Device's `Object_List`, then for every object its `Property_List` and a ReadProperty of every property it lists - every read comes back as a value. |
+| `configuration_test.py` | The Device's identity is configurable at start-up: with `--deviceID 389903 --deviceName "Chipkin Example B-ASC Unit 2"`, Who-Is, ReadProperty `Object_Name` and Who-Has by name all see the configured instance and name (and 389003 is gone); without them, the defaults; an empty or 256-byte name keeps the default with a warning, a 255-byte one is kept whole. `--help` lists exactly the options the example reads, and `--xml` prints XML. |
 | `commanding_test.py` | Commands each output at two priorities; `Present_Value`, `Priority_Array` and `Current_Command_Priority` follow the winning command, and the feedback input follows it too (the B-SA Profile Function, which a B-ASC includes). |
 | `failure_modes_test.py` | A disconnected valve (`no-output`, FAULT, command accepted but not obeyed), out-of-range writes, a write to an input. |
 | `dcc_test.py` | **The B-ASC Profile Function.** With `--dcc-password`: the heartbeat runs; wrong / missing password and deprecated `disable` are refused and it keeps running; `disable-initiation` stops it while ReadProperty, WriteProperty and Who-Is are still answered; `enable` resumes it; a 1-minute `disable-initiation` ends by itself. About 2.5 minutes. |

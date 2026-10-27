@@ -59,8 +59,8 @@ commands above.
 ## Run
 
 ```bash
-./build/BACnetExampleBASC [--port 47808] [--deviceID 389003]   # Linux/macOS
-.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389003]   # Windows
+./build/BACnetExampleBASC [--port 47808] [--deviceID 389003] [--deviceName "Chipkin Example B-ASC"]   # Linux/macOS
+.\build\Release\BACnetExampleBASC.exe [--port 47808] [--deviceID 389003] [--deviceName "Chipkin Example B-ASC"]   # Windows
 ```
 
 Interactive keys while running: `h` help, `q` quit, up/down disturb the simulated temperature (Analog Input 1).

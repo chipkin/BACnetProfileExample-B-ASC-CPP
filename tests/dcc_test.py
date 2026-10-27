@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-ASC Wire Test: a management station silences the controller and lets it speak again (DM-DCC-B).
 
-    python3 tests/dcc_test.py [--exe build/BACnetExampleBASC] [--port 47821]
+    python3 tests/dcc_test.py [--exe build/BACnetExampleBASC] [--port 47827]
 
 ANSI/ASHRAE 135-2024 Annex L.4.3, the B-ASC addition to a B-SA: "Ability to respond
 to communication control messages". Cl. 16.1.2: with DISABLE_INITIATION "the

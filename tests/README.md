@@ -22,7 +22,7 @@ python3 tests/run_wire_tests.py --exe build/BACnetExampleBASC
 
 On Windows, `--exe build\Release\BACnetExampleBASC.exe`. It ends with
 `ALL WIRE TESTS PASSED` (exit 0) or the scripts that failed. `--port` (default
-47821) is the UDP port the test starts the example on. It takes about 4 minutes (`dcc_test.py` waits out a 1-minute DeviceCommunicationControl).
+47827) is the UDP port the test starts the example on. It takes about 4 minutes (`dcc_test.py` waits out a 1-minute DeviceCommunicationControl).
 CI (`.github/workflows/release.yml`) runs it on Linux after the smoke test.
 
 ## The setup
@@ -52,6 +52,33 @@ binary. It plays a BACnet client such as Chipkin BACnet Explorer.
    the three reads Explorer 4.23.2.0 found failing at stack 6.0.21, reported
    against B-SS-CPP (#20, #21, #22). The Network Port object is the stack's, the
    same in every example; this test is copied from B-SS-CPP.
+5. Device **`Database_Revision`** reads 8: the stack starts it at 0 and adds one
+   for each object added at start-up (the Device and its seven objects), and
+   nothing changes the object database afterwards (cl. 12.11; docs/PICS.md).
+
+## `configuration_test.py` - the Device's identity is configurable
+
+BACnet requires the Device's Object_Identifier and Object_Name to be
+configurable (135-2024 cl. 12.1.1.3, 12.1.1.4); Object_Name must be unique
+across the internetwork, so two units cannot share a compile-time name. The
+controller is started three ways, and its help is checked:
+
+1. **No options (control):** Device 389003 answers Who-Is, and its
+   `Object_Name` is the default `Chipkin Example B-ASC`.
+2. **`--deviceID 389903 --deviceName "Chipkin Example B-ASC Unit 2"`:** the
+   device answers Who-Is as 389903; `Object_Name` reads the configured name;
+   a read of Device 389003 gets Error OBJECT / UNKNOWN_OBJECT (1/31); the
+   ready line names the configured device; a Who-Has by the configured name
+   gets an I-Have from Device 389903 with that name (DM-DOB-B).
+3. **Boundaries:** an empty name and a 256-byte name each print a warning and
+   keep the default; a 255-byte name (the limit) reads back whole.
+4. **The command line:** `--help` lists `--port`, `--deviceID`, `--deviceName`,
+   `--dcc-password` (a B-ASC executes DeviceCommunicationControl) and `--xml`;
+   with `--xml` the console shows each frame as an XML block.
+
+Against the binary from before `--deviceName` (2026-10-23, Windows) it fails 6
+of 12 checks (the configured name, the ready line, the Who-Has, both warnings,
+the 255-byte name); against the binary before `--xml`, 1 of 18 (no XML).
 
 ## `commanding_test.py` and `failure_modes_test.py`
 
